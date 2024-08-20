@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://github.com/LucaStrano/PaperSage/blob/main/github/papersage_logo.png?raw=true" alt="PaperSage Logo"/>
+  <img src="https://github.com/LucaStrano/PaperSage/blob/main/.github/papersage_logo.png?raw=true" alt="PaperSage Logo"/>
 </div>
 
 <br>
