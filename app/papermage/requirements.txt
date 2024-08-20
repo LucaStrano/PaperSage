@@ -1,0 +1,4 @@
+papermage[dev,predictors,visualizers]==0.20.0
+fastapi==0.112.1
+uvicorn==0.30.6
+python-multipart==0.0.9

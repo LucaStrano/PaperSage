@@ -1,0 +1,19 @@
+services:
+
+  ps-papermage:
+    build:
+      context: ./app/papermage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://ps-papermage:8000/health"]
+      interval: 30s
+      retries: 5
+    restart: always
+    container_name: ps-papermage
+    ports:
+     - 8000:8000
+    networks:
+     - ps-network
+
+networks:
+  ps-network:
+    driver: bridge
