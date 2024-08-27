@@ -1,0 +1,3 @@
+POSTGRES_USER=user_paper
+POSTGRES_PASSWORD=secret_mage
+POSTGRES_DB=papermagedb
