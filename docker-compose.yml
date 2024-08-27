@@ -13,6 +13,19 @@ services:
      - 8000:8000
     networks:
      - ps-network
+  
+  ps-postgres:
+    image: postgres:12
+    volumes:
+      - ./app/postgres/data:/var/lib/postgresql/data
+    restart: always
+    container_name: ps-postgres
+    ports:
+      - 5432:5432
+    env_file:
+      - .env
+    networks:
+     - ps-network
 
 networks:
   ps-network:
