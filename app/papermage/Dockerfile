@@ -4,6 +4,7 @@ WORKDIR app/
 
 COPY requirements.txt .
 COPY app.py .
+COPY utils.py .
 
 RUN apt-get update && \
     apt-get install --no-install-recommends -y \
