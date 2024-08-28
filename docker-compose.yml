@@ -16,14 +16,19 @@ services:
   
   ps-postgres:
     image: postgres:12
+    env_file:
+     - .env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d {POSTGRES_DB}"]
+      interval: 30s
+      retries: 5
     volumes:
       - ./app/postgres/data:/var/lib/postgresql/data
+      - ./app/postgres/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
     restart: always
     container_name: ps-postgres
     ports:
-      - 5432:5432
-    env_file:
-      - .env
+     - 5432:5432
     networks:
      - ps-network
 
