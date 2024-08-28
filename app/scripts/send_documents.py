@@ -32,5 +32,4 @@ for doc in docs:
     if res.status_code == 200:
         print(f"✅ {doc} Processed Successfully!")
     else:
-        print(f"❌ {doc} Failed to Process.")
-        sys.exit(1)
+        print(f"❌ Error : {res.status_code} - {res.text}")
