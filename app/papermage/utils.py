@@ -1,5 +1,5 @@
 from papermage.magelib import Entity, Box
-
+import hashlib
 from typing import List, Optional, Dict, Tuple
 
 def concatenate_texts(layer : List[Entity], remove_newline_chars = True) -> str:
@@ -63,3 +63,13 @@ def filter_row(row : Entity, page : Entity) -> bool:
     or any([row_box.is_overlap(foot.boxes[0]) for foot in page.intersect_by_box('footers')]) \
     or any([row_box.is_overlap(foot.boxes[0]) for foot in page.intersect_by_box('footnotes')]) \
     or any([row_box.is_overlap(head.boxes[0]) for head in page.intersect_by_box('headers')])
+
+def calculate_hash(content : bytes, buffer_size : int = 4096) -> str:
+    """Returns the truncated hash of the content using a buffer with `buffer_size` chunks."""
+    hash_obj = hashlib.md5()
+    for i in range(0, len(content), buffer_size):
+        chunk = content[i:i+buffer_size]
+        hash_obj.update(chunk)
+    full_hash = hash_obj.hexdigest()
+    truncated_hash = full_hash[:len(full_hash)//2]
+    return truncated_hash

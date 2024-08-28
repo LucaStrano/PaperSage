@@ -3,6 +3,8 @@ services:
   ps-papermage:
     build:
       context: ./app/papermage
+    env_file:
+     - .env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://ps-papermage:8000/health"]
       interval: 30s
