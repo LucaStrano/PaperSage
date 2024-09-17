@@ -17,7 +17,7 @@ services:
      - ps-network
   
   ps-postgres:
-    image: postgres:12
+    image: ankane/pgvector
     env_file:
      - .env
     healthcheck:
