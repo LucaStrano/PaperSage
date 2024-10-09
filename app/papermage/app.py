@@ -6,9 +6,10 @@ import os
 import psycopg2 as pg
 from utils import *
 import signal
+from papermage.recipes import CoreRecipe
 
-# from dotenv import load_dotenv
-# load_dotenv()
+from dotenv import load_dotenv
+load_dotenv()
 
 ## ---- CONFIGS ---- ##
 
@@ -29,6 +30,8 @@ conn = pg.connect(
 )
 cursor = conn.cursor()
 
+recipe = CoreRecipe()
+
 # Clean database connection on shutdown
 def handle_signal(signum, frame):
     print(f"Received signal {signum}. Shutting down...")
@@ -43,28 +46,26 @@ def handle_signal(signum, frame):
 signal.signal(signal.SIGTERM, handle_signal)
 signal.signal(signal.SIGINT, handle_signal)
 
-## ---- UTILITY DB FUNCTIONS ---- ##
+## ---- UTILITY FUNCTIONS ---- ##
 
 def does_file_exist(file_id : str) -> bool:
     """Check if a file with the given ID exists in the database"""
-    try:
-        cursor.execute("SELECT filename FROM papers WHERE id = %s", (file_id,))
-        result = cursor.fetchone()
-        return result is not None
-    except pg.DatabaseError as e:
-        print(f"Error checking for existing file: {e}")
-        return True # Avoid errors by not processing files that might already exist
+    cursor.execute("SELECT filename FROM papers WHERE id = %s", (file_id,))
+    result = cursor.fetchone()
+    return result is not None
     
-def save_file(file_id : str, file_name : str) -> bool:
-    """Save the file to the database. Returns True if successful, False otherwise"""
-    try:
-        cursor.execute("INSERT INTO papers (id, filename) VALUES (%s, %s)", (file_id, file_name))
-        conn.commit()
-        return True
-    except pg.DatabaseError as e:
-        print(f"Error saving file: {e}")
-        return False
+def save_file_to_db(file_id: str, file_name: str) -> None:
+    """Save the file to the database. Raises an exception if unsuccessful."""
+    cursor.execute("INSERT INTO papers (id, filename) VALUES (%s, %s)", (file_id, file_name))
+    conn.commit()
 
+def save_file(file_id : str, file_contents : bytes) -> None:
+    """Save the file to the filesystem inside `tmp/` folder as a PDF"""
+    if not os.path.exists("tmp/"):
+        os.mkdir("tmp/")
+    with open(os.path.join('tmp', f"{file_id}.pdf"), "wb") as f:
+         f.write(file_contents)
+    
 ## ---- FASTAPI ROUTES ---- ##
 
 app = FastAPI()
@@ -82,12 +83,30 @@ async def process(file: UploadFile):
 
     file_id = calculate_hash(file_contents)
 
-    if does_file_exist(file_id):
-        print(f"File {file_id} already processed.")
-        return JSONResponse(content={"status": "File already processed."}, status_code=409)
+    try:
+        if does_file_exist(file_id):
+            print(f"File {file_id} already processed.")
+            return JSONResponse(content={"status": "File already processed."}, status_code=409)
+    except pg.DatabaseError as e:
+        print(f"Error checking for existing file: {e}")
+        return JSONResponse(content={"status": "Error checking file in DB."}, status_code=500)
     
-    if not save_file(file_id, file.filename):
-        print(f"Error saving file {file_id}")
+    try:
+        save_file_to_db(file_id, file.filename)
+        print(f"File {file_id} - {file.filename} Inserted into DB")
+    except pg.DatabaseError as e:
+        print(f"Error saving file: {e}")
         return JSONResponse(content={"status": "Error saving file."}, status_code=500)
     
+    try:
+        save_file(file_id, file_contents)
+        print(f"File {file_id} - {file.filename} Saved to filesystem")
+    except OSError as e:
+        print(f"Error saving file: {e}")
+        return JSONResponse(content={"status": "Server error: retry."}, status_code=500)
+
+    # process the file
+    doc = recipe.run(os.path.join('data', f"{file_id}.pdf"))
+    markdown_content = process_document(doc)
+        
     return {"status": "ok"}

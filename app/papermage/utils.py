@@ -1,6 +1,12 @@
-from papermage.magelib import Entity, Box
+from papermage.magelib import Entity, Box, Document
 import hashlib
 from typing import List, Optional, Dict, Tuple
+
+WRAP_ROWS = True
+PARAGRAPH = 'par'
+SECTION = 'sec'
+
+### --- PAPERMAGE UTILITY FUNCTIONS --- ###
 
 def concatenate_texts(layer : List[Entity], remove_newline_chars = True) -> str:
     """concatenate all text blocks in a layer."""
@@ -63,6 +69,14 @@ def filter_row(row : Entity, page : Entity) -> bool:
     or any([row_box.is_overlap(foot.boxes[0]) for foot in page.intersect_by_box('footers')]) \
     or any([row_box.is_overlap(foot.boxes[0]) for foot in page.intersect_by_box('footnotes')]) \
     or any([row_box.is_overlap(head.boxes[0]) for head in page.intersect_by_box('headers')])
+
+# 
+
+def process_document(doc : Document) -> None:
+    """Chunks the document, extracts metadata and info and sends to Vector Store."""
+    pass
+
+### --- APP UTILITY FUNCTIONS --- ###
 
 def calculate_hash(content : bytes, buffer_size : int = 4096) -> str:
     """Returns the truncated hash of the content using a buffer with `buffer_size` chunks."""
