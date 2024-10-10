@@ -84,6 +84,39 @@ def get_section(doc : Document, row : Entity) -> Optional[Entity]:
     sections = doc.intersect_by_box(row, 'sections')
     return sections[0] if len(sections) > 0 else None
 
+def convert_rows_to_markdown(doc : Document, proc_rows : List[Dict[str,str|Entity]]) -> str:
+    """Converts extracted rows into markdown format."""
+    content = ''
+    title, authors, abstract, keywords = extract_paper_info(doc.pages[0])
+    content += f"# {title}\n\n"
+    content += f"{authors}\n\n"
+    content += f"{abstract}\n\n"
+    content += f"{keywords}\n"
+    for row_idx, row in enumerate(proc_rows):
+
+        row_tipe = row['type']
+        row_ent = row['entity']
+
+        if row_tipe == SECTION:
+            content += f"\n## {row_ent.text}\n\n"
+
+        elif row_tipe == PARAGRAPH:
+            if WRAP_ROWS:
+                if row_ent.text.endswith('-'):
+                    try:
+                        next_row = proc_rows[row_idx + 1]['entity']
+                        cur, next = wrap_rows(row_ent, next_row)
+                        proc_rows[row_idx]['entity'] = cur # for consistency
+                        proc_rows[row_idx + 1]['entity'] = next # update next row
+                    except IndexError as e:
+                        print(f"WRAPPING ROWS: NO NEXT ROW FOUND - {e}")
+                        continue
+                # wrap "wo- \n rd" sequences in "word" 
+            content += f"{row_ent.text}\n"
+
+    logger.info("FINISHED PROCESSING EXTRACTED ROWS")
+    return content
+
 def process_document(doc : Document) -> None:
     """Converts document into markdown format."""
 
@@ -95,14 +128,14 @@ def process_document(doc : Document) -> None:
 
     for page_idx, page in enumerate(doc.pages):
 
-        print(f"PROCESSING PAGE {page_idx}")
+        logger.info(f"PROCESSING PAGE {page_idx}")
         page_rows = [x for x in page.intersect_by_span('rows')]
         page_figs =  page.intersect_by_box('figures')
-        print(f"FOUND {len(page_rows)} ROW(s) AND {len(page_figs)} FIGURE(s) IN PAGE {page_idx}")
+        logger.debug(f"FOUND {len(page_rows)} ROW(s) AND {len(page_figs)} FIGURE(s) IN PAGE {page_idx}")
 
         #extract image data from the page
         for fig in page_figs:
-            # TODO extract figure id (such as Fig.1), extract figure caption and metadata
+          # TODO extract figure id (such as Fig.1), extract figure caption and metadata
             pass
 
         # extract text data from the page
@@ -113,14 +146,14 @@ def process_document(doc : Document) -> None:
             # check if row belongs to a section, if so, add the section to the processed rows
             if section := get_section(doc, row):
                 if found_ref:
-                    print(f"FOUND NEW SECTION AFTER REFERENCES - STOPPING")
+                    logger.info(f"FOUND NEW SECTION AFTER REFERENCES - STOPPING")
                     break
                 if section not in [entry['entity'] for entry in proc_rows if entry['type'] == SECTION]:
                     if any(sub in section.text.lower() for sub in ['reference', 'citation', 'bibliograph']):
-                        print(f"FOUND REFERENCES PARAGRAPH ON PAGE {page_idx}")
+                        logger.debug(f"FOUND REFERENCES PARAGRAPH ON PAGE {page_idx}")
                         found_ref = True
                         continue
-                    print("ADDED SECTION ", section.text)
+                    logger.debug("ADDED SECTION ", section.text)
                     proc_rows.append( {'type':SECTION, 'entity':section} )
                 continue
             
@@ -128,6 +161,10 @@ def process_document(doc : Document) -> None:
                 ref_rows.append(row)
             else:
                 proc_rows.append( {'type':PARAGRAPH, 'entity':row} )
+
+    # convert processed rows into markdown format
+    markdown_content = convert_rows_to_markdown(doc, proc_rows)
+    return markdown_content
 
 
 ### --- APP UTILITY FUNCTIONS --- ###
