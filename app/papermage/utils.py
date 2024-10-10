@@ -1,10 +1,19 @@
 from papermage.magelib import Entity, Box, Document
 import hashlib
 from typing import List, Optional, Dict, Tuple
+import logging
+
+### --- CONSTANTS --- ###
 
 WRAP_ROWS = True
 PARAGRAPH = 'par'
 SECTION = 'sec'
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+#log via file
+fh = logging.FileHandler('app.log')
+fh.setLevel(logging.DEBUG)
+logger.addHandler(fh)
 
 ### --- PAPERMAGE UTILITY FUNCTIONS --- ###
 
@@ -70,11 +79,56 @@ def filter_row(row : Entity, page : Entity) -> bool:
     or any([row_box.is_overlap(foot.boxes[0]) for foot in page.intersect_by_box('footnotes')]) \
     or any([row_box.is_overlap(head.boxes[0]) for head in page.intersect_by_box('headers')])
 
-# 
+def get_section(doc : Document, row : Entity) -> Optional[Entity]:
+    """Returns the section that intersects with the row, None Otherwise."""
+    sections = doc.intersect_by_box(row, 'sections')
+    return sections[0] if len(sections) > 0 else None
 
 def process_document(doc : Document) -> None:
-    """Chunks the document, extracts metadata and info and sends to Vector Store."""
-    pass
+    """Converts document into markdown format."""
+
+    ref_rows : List[Entity] = [] # content of the references section
+    found_ref = False
+
+    proc_rows : List[Dict[str,str|Entity]] = []
+    image_data : List
+
+    for page_idx, page in enumerate(doc.pages):
+
+        print(f"PROCESSING PAGE {page_idx}")
+        page_rows = [x for x in page.intersect_by_span('rows')]
+        page_figs =  page.intersect_by_box('figures')
+        print(f"FOUND {len(page_rows)} ROW(s) AND {len(page_figs)} FIGURE(s) IN PAGE {page_idx}")
+
+        #extract image data from the page
+        for fig in page_figs:
+            # TODO extract figure id (such as Fig.1), extract figure caption and metadata
+            pass
+
+        # extract text data from the page
+        for row_idx, row in enumerate(page_rows):
+            # skipping rows that belong to preliminary or additional paper sections
+            if filter_preliminary_row(row, page) or filter_row(row, page):
+                continue
+            # check if row belongs to a section, if so, add the section to the processed rows
+            if section := get_section(doc, row):
+                if found_ref:
+                    print(f"FOUND NEW SECTION AFTER REFERENCES - STOPPING")
+                    break
+                if section not in [entry['entity'] for entry in proc_rows if entry['type'] == SECTION]:
+                    if any(sub in section.text.lower() for sub in ['reference', 'citation', 'bibliograph']):
+                        print(f"FOUND REFERENCES PARAGRAPH ON PAGE {page_idx}")
+                        found_ref = True
+                        continue
+                    print("ADDED SECTION ", section.text)
+                    proc_rows.append( {'type':SECTION, 'entity':section} )
+                continue
+            
+            if found_ref:
+                ref_rows.append(row)
+            else:
+                proc_rows.append( {'type':PARAGRAPH, 'entity':row} )
+
 
 ### --- APP UTILITY FUNCTIONS --- ###
 

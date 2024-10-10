@@ -32,6 +32,8 @@ cursor = conn.cursor()
 
 recipe = CoreRecipe()
 
+save_folder = 'data/'
+
 # Clean database connection on shutdown
 def handle_signal(signum, frame):
     print(f"Received signal {signum}. Shutting down...")
@@ -60,10 +62,10 @@ def save_file_to_db(file_id: str, file_name: str) -> None:
     conn.commit()
 
 def save_file(file_id : str, file_contents : bytes) -> None:
-    """Save the file to the filesystem inside `tmp/` folder as a PDF"""
-    if not os.path.exists("tmp/"):
-        os.mkdir("tmp/")
-    with open(os.path.join('tmp', f"{file_id}.pdf"), "wb") as f:
+    """Save the file to the filesystem inside `save_folder` as a PDF"""
+    if not os.path.exists(save_folder):
+        os.mkdir(save_folder)
+    with open(os.path.join(save_folder, f"{file_id}.pdf"), "wb") as f:
          f.write(file_contents)
     
 ## ---- FASTAPI ROUTES ---- ##
