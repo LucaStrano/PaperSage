@@ -84,6 +84,25 @@ def get_section(doc : Document, row : Entity) -> Optional[Entity]:
     sections = doc.intersect_by_box(row, 'sections')
     return sections[0] if len(sections) > 0 else None
 
+def extend_box(ent : Entity, amount : float) -> Entity:
+    """Returns a copy of the entity with a box extended upwards and downwards by amount."""
+    ext_ent = Entity(spans=ent.spans.copy(), boxes=ent.boxes.copy(), 
+                     images=ent.images.copy(), metadata=ent.metadata)
+    # coordinates are relative to the page size
+    json_box = ent.boxes[0].to_json()
+    json_box[1] = json_box[1] - amount if json_box[1] - amount > 0 else 0 # extend box upwards
+    json_box[3] = json_box[3] + amount*2 if json_box[3] + amount*2 < 1 else 1 # extend box downwards
+    new_box = Box.from_json(json_box)
+    ext_ent.boxes = [new_box]
+    return ext_ent
+
+def find_captions_from_image(image : Entity, doc : Document, entity_type : str = 'captions') -> Optional[Entity]:
+    """Returns the entity of type entity_type that intersects with ent."""
+    ext_entity = extend_box(image, 0.05)
+    entities = doc.intersect_by_box(ext_entity, entity_type)
+    if not len(entities)>0: return None
+    return concatenate_texts(entities)
+
 def convert_rows_to_markdown(doc : Document, proc_rows : List[Dict[str,str|Entity]]) -> str:
     """Converts extracted rows into markdown format."""
     content = ''
