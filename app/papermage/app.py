@@ -25,7 +25,7 @@ conn = pg.connect(
     database=db_name,
     user=db_user,
     password=db_password,
-    host="http://localhost:5432",
+    host="localhost",
     port="5432"
 )
 cursor = conn.cursor()
@@ -109,6 +109,6 @@ async def process(file: UploadFile):
 
     # process the file
     doc = recipe.run(os.path.join('data', f"{file_id}.pdf"))
-    markdown_content = process_document(doc)
+    image_data, md_content = process_document(doc)
         
     return {"status": "ok"}

@@ -2,6 +2,7 @@ from papermage.magelib import Entity, Box, Document
 import hashlib
 from typing import List, Optional, Dict, Tuple
 import logging
+from PIL import Image
 
 ### --- CONSTANTS --- ###
 
@@ -103,6 +104,14 @@ def find_captions_from_image(image : Entity, doc : Document, entity_type : str =
     if not len(entities)>0: return None
     return concatenate_texts(entities)
 
+def extract_image_from_box(fig : Entity, page : Entity, page_wdth : int, page_hght : int ) -> Image:
+    """Extracts the Image from the page that intersects with the box."""
+    fig_box = fig.boxes[0]
+    fig_box = fig_box.to_absolute(page_wdth, page_hght).xy_coordinates
+    page_image = page.images[0]
+    return page_image._pilimage.crop(fig_box)
+
+
 def convert_rows_to_markdown(doc : Document, proc_rows : List[Dict[str,str|Entity]]) -> str:
     """Converts extracted rows into markdown format."""
     content = ''
@@ -133,18 +142,18 @@ def convert_rows_to_markdown(doc : Document, proc_rows : List[Dict[str,str|Entit
                 # wrap "wo- \n rd" sequences in "word" 
             content += f"{row_ent.text}\n"
 
-    logger.info("FINISHED PROCESSING EXTRACTED ROWS")
+    logger.info("FINISHED CONVERTING EXTRACTED ROWS TO MARKDOWN")
     return content
 
-def process_document(doc : Document) -> None:
-    """Converts document into markdown format."""
+def process_document(doc : Document) -> Tuple[List[Tuple], str]:
+    """Processes the document and returns the image data and markdown content."""
 
     ref_rows : List[Entity] = [] # content of the references section
     found_ref = False
 
     proc_rows : List[Dict[str,str|Entity]] = []
-    image_data : List
-
+    image_data : List[Tuple] = []
+    width, height = doc.images[0]._pilimage.size
     for page_idx, page in enumerate(doc.pages):
 
         logger.info(f"PROCESSING PAGE {page_idx}")
@@ -153,9 +162,13 @@ def process_document(doc : Document) -> None:
         logger.debug(f"FOUND {len(page_rows)} ROW(s) AND {len(page_figs)} FIGURE(s) IN PAGE {page_idx}")
 
         #extract image data from the page
-        for fig in page_figs:
-          # TODO extract figure id (such as Fig.1), extract figure caption and metadata
-            pass
+        for fig_idx, fig in enumerate(page_figs):
+            caption = find_captions_from_image(fig, doc)
+            logger.debug(f"FOUND FIGURE {fig_idx} IN PAGE {page_idx}")
+            logger.debug(f"FOUND CAPTION {caption}")
+            img = extract_image_from_box(fig, page, width, height)
+            image_data.append((img, caption))
+            #img.save(f"images/fig_{fig_idx}_page_{page_idx}.png", quality=100)
 
         # extract text data from the page
         for row_idx, row in enumerate(page_rows):
@@ -172,7 +185,7 @@ def process_document(doc : Document) -> None:
                         logger.debug(f"FOUND REFERENCES PARAGRAPH ON PAGE {page_idx}")
                         found_ref = True
                         continue
-                    logger.debug("ADDED SECTION ", section.text)
+                    logger.debug(f"ADDED SECTION {section.text}")
                     proc_rows.append( {'type':SECTION, 'entity':section} )
                 continue
             
@@ -183,7 +196,7 @@ def process_document(doc : Document) -> None:
 
     # convert processed rows into markdown format
     markdown_content = convert_rows_to_markdown(doc, proc_rows)
-    return markdown_content
+    return (image_data, markdown_content)
 
 
 ### --- APP UTILITY FUNCTIONS --- ###
