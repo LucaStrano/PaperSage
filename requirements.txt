@@ -1,0 +1,2 @@
+papermage[dev,predictors,visualizers]==0.20.0
+chainlit==1.2.0
