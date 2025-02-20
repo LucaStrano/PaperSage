@@ -19,6 +19,7 @@ help:
 	@echo "make install - Install PaperSage"
 	@echo "make run - Run PaperSage"
 
+
 .PHONY: banner
 banner:
 	@echo "  ____                       ____                    "
@@ -43,7 +44,6 @@ install:
 	@pip install -r requirements.txt || { echo "❌ Failed to Install Requirements. Aborting."; exit 1; }
 
 
-# CONFIGS := $(shell python3 app/scripts/read_config.py)
 .PHONY: run
 run:
 	@make banner

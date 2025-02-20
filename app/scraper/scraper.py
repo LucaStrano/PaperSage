@@ -1,13 +1,16 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple
 
-image_data = List[bytes, dict]
+image_data = List[Tuple[bytes, dict]]
 
 class Scraper(ABC):
     """
     Abstract class for Scraper.
     Implement this class to create a new custom Scraper.
     """
+
+    def __init__(self):
+        pass
     
     @abstractmethod
     def process_document(self, document_path: str) -> Tuple[str, image_data]:
