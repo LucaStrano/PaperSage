@@ -43,6 +43,7 @@ install:
 	@pip install -r requirements.txt || { echo "❌ Failed to Install Requirements. Aborting."; exit 1; }
 
 
+# CONFIGS := $(shell python3 app/scripts/read_config.py)
 .PHONY: run
 run:
 	@make banner
@@ -50,4 +51,4 @@ run:
 	@echo "+---------------------------+"
 	@echo "|  🚀 Running PaperSage...  |"
 	@echo "+---------------------------+"
-	@chainlit run main.py -w || { echo "❌ Failed to Run PaperSage. Aborting."; exit 1; }
+	@eval "$$(python3 app/scripts/read_config.py)" && chainlit run --host $$CHAINLIT_HOST --port $$CHAINLIT_PORT main.py -w || { echo "❌ Failed to Run PaperSage. Aborting."; exit 1; }

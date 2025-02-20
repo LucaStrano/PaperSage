@@ -1,0 +1,4 @@
+configs:
+  - chainlit_config:
+      - host: localhost
+      - port: 8000
