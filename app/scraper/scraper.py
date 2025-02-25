@@ -1,7 +1,13 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple
+from PIL.Image import Image
 
-image_data = List[Tuple[bytes, dict]]
+ImageData = List[Tuple[Image, dict]]
+# dict contains the following keys:
+# - 'caption' : str
+# - 'page_id' : int
+# - 'fig_id' : int
+
 
 class Scraper(ABC):
     """
@@ -13,7 +19,7 @@ class Scraper(ABC):
         pass
     
     @abstractmethod
-    def process_document(self, document_path: str) -> Tuple[str, image_data]:
+    def process_document(self, document_path: str) -> Tuple[str, ImageData]:
         """
         Process the document and returns markdown-formatted text and Image data.
         Args:
