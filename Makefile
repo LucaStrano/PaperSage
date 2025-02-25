@@ -42,6 +42,8 @@ install:
 	@echo "+------------------------------+"
 	@echo "🐍 installing Python Requirements..."
 	@pip install -r requirements.txt || { echo "❌ Failed to Install Requirements. Aborting."; exit 1; }
+	@echo "📦 initializing Database..."
+	@python3 app/scripts/init_db.py || { echo "❌ Failed to Initialize Database. Aborting."; exit 1; }
 
 
 .PHONY: run

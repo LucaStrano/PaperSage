@@ -204,3 +204,8 @@ cython_debug/
 
 # Notebook
 *.ipynb
+
+# PROJECT IGNORES
+
+temp/
+app/storage/sqlite/*
