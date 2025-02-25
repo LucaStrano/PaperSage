@@ -28,7 +28,8 @@ async def main(message: cl.Message):
                     )
                     
                     # Update processing message to show completion
-                    await processing_msg.update(content=f"Successfully processed document \"{element.name}\"!")
+                    processing_msg.content = f"Document \"{element.name}\" processed!"
+                    await processing_msg.update()
                     
                     # TODO handle markdown and image_data
                     
