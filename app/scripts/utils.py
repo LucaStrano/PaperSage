@@ -15,11 +15,11 @@ def calculate_hash(content : bytes, buffer_size : int = 4096) -> str:
 
 def does_file_exist(cursor: sqlite3.Cursor, file_id: str) -> bool:
     """Check if a file with the given ID exists in the database"""
-    cursor.execute("SELECT filename FROM papers WHERE id = ?", (file_id,))
+    cursor.execute("SELECT name FROM papers WHERE id = ?", (file_id,))
     result = cursor.fetchone()
     return result is not None
     
 def save_file_to_db(cursor : sqlite3.Cursor, connection : sqlite3.Connection, file_id: str, file_name: str) -> None:
     """Save the file to the database. Raises an exception if unsuccessful."""
-    cursor.execute("INSERT INTO papers (id, filename) VALUES (%s, %s)", (file_id, file_name))
+    cursor.execute("INSERT INTO papers (id, name) VALUES (?, ?)", (file_id, file_name))
     cursor.connection.commit()
