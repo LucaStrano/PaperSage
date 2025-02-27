@@ -18,6 +18,7 @@ help:
 	@echo "+---------------+"
 	@echo "make install - Install PaperSage"
 	@echo "make run - Run PaperSage"
+	@echo "make resetdb - Reset Database"
 
 
 .PHONY: banner
@@ -54,3 +55,13 @@ run:
 	@echo "|  🚀 Running PaperSage...  |"
 	@echo "+---------------------------+"
 	@eval "$$(python3 app/scripts/read_config.py)" && chainlit run --host $$CHAINLIT_HOST --port $$CHAINLIT_PORT main.py -w || { echo "❌ Failed to Run PaperSage. Aborting."; exit 1; }
+
+.PHONY: resetdb
+resetdb:
+	@make banner
+	@echo "\n\n"
+	@echo "+---------------------------+"
+	@echo "|  🔄 Resetting Database...  |"
+	@echo "+---------------------------+"
+	@python3 app/scripts/reset_db.py || { echo "❌ Failed to Reset Database. Aborting."; exit 1; }
+	@echo "✅ Database Resetted Successfully."
