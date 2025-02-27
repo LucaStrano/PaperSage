@@ -209,3 +209,4 @@ cython_debug/
 
 temp/
 app/storage/sqlite/*
+.files/
