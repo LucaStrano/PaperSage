@@ -1,4 +1,13 @@
 configs:
+
   - chainlit_config:
       - host: localhost
       - port: 8000
+
+  - qdrant_config:
+      - collection_name: papers
+      
+  - embedding_config: # If you want to change model, also change max_seq_length and output_length
+      - model: znbang/bge:small-en-v1.5-f32
+      - max_seq_length: 512
+      - output_length: 384

@@ -209,4 +209,5 @@ cython_debug/
 
 temp/
 app/storage/sqlite/*
+app/storage/qdrant/*
 .files/
