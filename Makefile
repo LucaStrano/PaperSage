@@ -9,6 +9,7 @@
 
 defaut: help
 
+
 .PHONY: help
 help:
 	@make banner
@@ -45,6 +46,9 @@ install:
 	@pip install -r requirements.txt > /dev/null || { echo "❌ Failed to Install Requirements. Aborting."; exit 1; }
 	@echo "📦 initializing Database..."
 	@python3 app/scripts/init_db.py || { echo "❌ Failed to Initialize Database. Aborting."; exit 1; }
+	@echo "🦙 pulling Ollama embedding model..."
+	@eval "$$(python3 app/scripts/read_config.py)" && ollama pull $$OLLAMA_EMB_MODEL || { echo "❌ Failed to Pull Ollama Embedding Model. Aborting."; exit 1; } 
+	@echo "✅ PaperSage Installed Successfully."
 
 
 .PHONY: run
@@ -54,7 +58,8 @@ run:
 	@echo "+---------------------------+"
 	@echo "|  🚀 Running PaperSage...  |"
 	@echo "+---------------------------+"
-	@eval "$$(python3 app/scripts/read_config.py)" && chainlit run --host $$CHAINLIT_HOST --port $$CHAINLIT_PORT main.py -w || { echo "❌ Failed to Run PaperSage. Aborting."; exit 1; }
+	@eval "$$(python3 app/scripts/read_config.py)" && ollama list && chainlit run --host $$CHAINLIT_HOST --port $$CHAINLIT_PORT main.py -w || { echo "❌ Failed to Run PaperSage. Aborting."; exit 1; }
+
 
 .PHONY: resetdb
 resetdb:
