@@ -64,6 +64,8 @@ async def main(message: cl.Message):
                 file_path = element.path
                 try:
 
+                    await cl.Message(content=f"Processing document \"{element.name}\"...")  .send()
+                    
                     # step 1. add file to sqlite db if not processed
                     conn = cl.user_session.get("db_conn")
                     cursor = conn.cursor()
@@ -82,6 +84,11 @@ async def main(message: cl.Message):
 
                     # step 3. process md, img_data
                     # TODO
+
+                    # step 4. add new paper to settings
+                    papers = await get_avaliable_papers(conn)
+                    new_settings = await generate_settings(papers)
+                    cl.user_session.set("paper_settings", new_settings)
 
                     await cl.Message(content=f"Document \"{element.name}\" processed!").send()
                     
