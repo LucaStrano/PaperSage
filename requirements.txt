@@ -1,3 +1,5 @@
 chainlit==2.2.1
 papermage[dev,predictors,visualizers]==0.20.0
 qdrant_client==1.13.2
+langchain==0.3.19
+langchain_ollama==0.2.3
