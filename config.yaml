@@ -7,7 +7,13 @@ configs:
   - qdrant_config:
       - collection_name: papers
       
-  - embedding_config: # If you want to change model, also change max_seq_length and output_length
-      - model: znbang/bge:small-en-v1.5-f32
+  - embedding_config: # If you want to change model, also change the other settings accordingly
+      - model: znbang/bge:small-en-v1.5-f32 # ollama model id
+      - tokenizer: BAAI/bge-small-en-v1.5 # huggingface model id 
       - max_seq_length: 512
       - output_length: 384
+
+  - chunking_config:
+      - use_emb_model_max_seq_length: True
+      - chunk_size: null # set if use_emb_model_max_seq_length is False
+      - chunk_overlap_percent: 0.2
