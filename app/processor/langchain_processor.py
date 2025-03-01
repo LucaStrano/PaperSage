@@ -5,6 +5,8 @@ from typing import List, Tuple
 from PIL.Image import Image
 from typing import Dict, Any
 import yaml
+from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
+from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
 
 class LangchainProcessor(Processor):
     """
@@ -13,6 +15,22 @@ class LangchainProcessor(Processor):
     
     def __init__(self):
         super().__init__()
+        self.configs = self.read_config()
+        self.tokenizer = self.load_tokenizer_model(self.configs['tokenizer'])
+        if self.configs['use_emb_model_max_seq_length']:
+            self.chunk_size = self.configs['max_seq_length']
+        else:
+            self.chunk_size = self.configs['chunk_size']
+        self.chunk_overlap = int(self.chunk_size * self.configs['chunk_overlap_percent'])
+        self.markdown_splitter = MarkdownHeaderTextSplitter([("##", "chapter")])
+        self.token_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+            self.tokenizer, chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap
+        )
+
+    def load_tokenizer_model(self, model_name : str) -> PreTrainedTokenizer|PreTrainedTokenizerFast:
+        """Loads the tokenizer of the Embedding Model used by the Embedding Server."""
+        token = AutoTokenizer.from_pretrained(model_name)
+        return token
 
     def read_config(self) -> Dict[str, Any]:
 
