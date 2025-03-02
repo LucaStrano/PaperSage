@@ -1,13 +1,13 @@
 from app.processor.processor import Processor
 from app.scraper.scraper import ImageData
 from qdrant_client import QdrantClient
-from typing import List, Tuple
-from PIL.Image import Image
+from typing import List
 from typing import Dict, Any
 import yaml
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
 from langchain_core.documents import Document
+from sqlite3 import Connection
 
 class LangchainProcessor(Processor):
     """
@@ -70,7 +70,7 @@ class LangchainProcessor(Processor):
         splits.insert(0, texts[0]) # Add paper info to the beginning of the list
         return splits
 
-    def process(self, md_data: str, image_data : ImageData, client : QdrantClient) -> None:
+    def process(self, md_data: str, image_data : ImageData, paper_id : str, sql_conn : Connection, qdrant_client : QdrantClient) -> None:
         """
         Processes markdown and image data and inserts it into the Qdrant vector store.
         Args:
