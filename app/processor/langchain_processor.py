@@ -8,6 +8,8 @@ from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharac
 from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
 from langchain_core.documents import Document
 from sqlite3 import Connection
+import re
+from uuid import uuid4
 
 class LangchainProcessor(Processor):
     """
@@ -70,12 +72,47 @@ class LangchainProcessor(Processor):
         splits.insert(0, texts[0]) # Add paper info to the beginning of the list
         return splits
 
-    def process(self, md_data: str, image_data : ImageData, paper_id : str, sql_conn : Connection, qdrant_client : QdrantClient) -> None:
+
+    def create_split_metadata(self, paper_id : str, md_splits : List[Document]) -> List[Document]:
         """
-        Processes markdown and image data and inserts it into the Qdrant vector store.
+        Creates metadata for each split.
         Args:
-            md_data (str): Markdown formatted text.
-            image_data (ImageData): Image data.
-            client: Qdrant Vector Store client.
+            md_splits (List[Document]): List of Document objects.
+        Returns:
+            List[Document]: List of Document objects containing metadata.
         """
+        chapter_num_regex = r'\b\d+(?:\.\d+)*\b'
+        fig_ref_ids_regex = r'(?i)\b(?:Figure|Fig\.?) (\d+(?:\.\d+)*)\b'
+        for i, split in enumerate(md_splits):
+            split.metadata['id'] = str(uuid4())
+            split.metadata['paper_id'] = paper_id
+            if 'chapter' in split.metadata.keys():
+                chapter_id = re.findall(chapter_num_regex, split.metadata['chapter'])
+                if chapter_id:
+                    split.metadata['chapter_id'] = chapter_id[0]
+            split.metadata['fig_ref_ids'] = re.findall(fig_ref_ids_regex, split.page_content)
+            # next and previous split ids
+            if i > 0:
+                split.metadata['prev_id'] = md_splits[i - 1].metadata['id']
+                md_splits[i-1].metadata['next_id'] = split.metadata['id']
+
+                
+    def insert_paper_info(self, paper_info: Document, paper_id : str, sql_conn : Connection) -> None:
+        """
+        Inserts paper info into the database.
+        Args:
+            paper_info (Document): Document object containing paper info.
+            paper_id (str): Paper ID.
+            sql_conn (Connection): SQLite connection object.
+        """
+        cursor = sql_conn.cursor()
+        cursor.execute('INSERT INTO paper_info VALUES (?,?)', (paper_id, paper_info.page_content))
+        sql_conn.commit()
+        cursor.close()
+
+    def process(self, md_data: str, image_data : ImageData, paper_id : str, sql_conn : Connection, qdrant_client : QdrantClient) -> None:
+
         md_splits = self.split_md_data(md_data)
+        self.insert_paper_info(md_splits[0], paper_id, sql_conn)
+        md_splits.pop(0) # Remove paper info from the list
+        self.create_split_metadata(paper_id, md_splits)
