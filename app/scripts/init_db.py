@@ -18,6 +18,13 @@ CREATE TABLE IF NOT EXISTS papers (
     add_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )""")
 
+c.execute("""\
+CREATE TABLE IF NOT EXISTS paper_info (
+    id VARCHAR(32) PRIMARY KEY, 
+    content TEXT NOT NULL,
+    FOREIGN KEY (id) REFERENCES papers(id)
+)""")
+
 conn.commit()
 c.close()
 conn.close()
@@ -26,17 +33,25 @@ print("✅ SQLite3 database created.")
 # QDRANT CONFIG
 print("Creating Qdrant collection...")
 settings = yaml.safe_load(open("config.yaml", "r"))
-print(settings)
 qdrantdir_path = os.path.join("app", "storage", "qdrant")
 os.makedirs(qdrantdir_path, exist_ok=True)
 
 client = QdrantClient(path=os.path.join(qdrantdir_path, "vectorstore"))
-client.create_collection(
-    collection_name=settings['configs'][1]['qdrant_config'][0]['collection_name'], 
-    vectors_config=models.VectorParams(
-        size=settings['configs'][2]['embedding_config'][2]['output_length'], 
-        distance=models.Distance.COSINE
-    ),
-)
-client.close()
-print("✅ Qdrant collection created.")
+
+try:
+
+    client.create_collection(
+        collection_name=settings['configs'][1]['qdrant_config'][0]['collection_name'], 
+        vectors_config=models.VectorParams(
+            size=settings['configs'][2]['embedding_config'][3]['output_length'], 
+            distance=models.Distance.COSINE
+        ),
+    )
+    print("✅ Qdrant collection created.")
+except ValueError as e:
+    if 'already exists' in str(e):
+        print("Collection already exists.")
+    else:
+        print("Error creating collection:", e)
+finally:
+    client.close()
