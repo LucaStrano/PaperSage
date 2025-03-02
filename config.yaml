@@ -16,4 +16,5 @@ configs:
   - chunking_config:
       - use_emb_model_max_seq_length: True
       - chunk_size: null # set if use_emb_model_max_seq_length is False
+      - chunk_size_penalty: 20 # decreases max chunk size by amount, used to append section titles to chunks
       - chunk_overlap_percent: 0.2
