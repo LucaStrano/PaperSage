@@ -8,13 +8,14 @@ configs:
       - collection_name: papers
       
   - embedding_config: # If you want to change model, also change the other settings accordingly
-      - model: znbang/bge:small-en-v1.5-f32 # ollama model id
-      - tokenizer: BAAI/bge-small-en-v1.5 # huggingface model id 
-      - max_seq_length: 512
-      - output_length: 384
+      - model: nomic-embed-text:137m-v1.5-fp16 # ollama model id
+      - tokenizer: nomic-ai/nomic-embed-text-v1.5 # huggingface model id
+      - max_seq_length: 8192
+      - output_length: 768
+      - image_model: nomic-ai/nomic-embed-text-v1.5 # huggingface model id
 
   - chunking_config:
-      - use_emb_model_max_seq_length: True
-      - chunk_size: null # set if use_emb_model_max_seq_length is False
+      - use_emb_model_max_seq_length: False
+      - chunk_size: 500 # set if use_emb_model_max_seq_length is False
       - chunk_size_penalty: 20 # decreases max chunk size by amount, used to append section titles to chunks
       - chunk_overlap_percent: 0.2
