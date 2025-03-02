@@ -19,7 +19,7 @@ help:
 	@echo "+---------------+"
 	@echo "make install - Install PaperSage"
 	@echo "make run - Run PaperSage"
-	@echo "make resetdb [id=PAPER_ID] - Reset Database (entire DB or specific paper)"
+	@echo "make resetdb - Reset Database"
 
 
 .PHONY: banner
@@ -68,12 +68,5 @@ resetdb:
 	@echo "+---------------------------+"
 	@echo "|  🔄 Resetting Database...  |"
 	@echo "+---------------------------+"
-	@if [ -z "$(id)" ]; then \
-		read -p "🚨 This will clear all papers from the database. Are you sure? (y/N): " confirm && [[ $$confirm == [yY] || $$confirm == [yY][eE][sS] ]] || { echo "❌ Database reset cancelled."; exit 1; }; \
-		python3 app/scripts/reset_db.py || { echo "❌ Failed to Reset Database. Aborting."; exit 1; }; \
-		echo "✅ Database Resetted Successfully."; \
-	else \
-		read -p "🚨 This will delete paper with ID $(id). Are you sure? (y/N): " confirm && [[ $$confirm == [yY] || $$confirm == [yY][eE][sS] ]] || { echo "❌ Paper deletion cancelled."; exit 1; }; \
-		python3 app/scripts/reset_db.py $(id) || { echo "❌ Failed to Delete Paper. Aborting."; exit 1; }; \
-		echo "✅ Paper $(id) Deleted Successfully."; \
-	fi
+	@python3 app/scripts/reset_db.py || { echo "❌ Failed to Reset Database. Aborting."; exit 1; }
+	@echo "✅ Database Resetted Successfully."
