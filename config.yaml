@@ -12,7 +12,7 @@ configs:
       - tokenizer: nomic-ai/nomic-embed-text-v1.5 # huggingface model id
       - max_seq_length: 8192
       - output_length: 768
-      - image_model: nomic-ai/nomic-embed-text-v1.5 # huggingface model id
+      - image_model: nomic-ai/nomic-embed-vision-v1.5 # huggingface model id
 
   - chunking_config:
       - use_emb_model_max_seq_length: False
