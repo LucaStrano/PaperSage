@@ -1,7 +1,14 @@
 import os
 import sqlite3
 from qdrant_client import QdrantClient, models
-import yaml
+import os
+import sys
+
+sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
+from app.config_loader import ConfigLoader
+
+
+configs = ConfigLoader().get_config()
 
 # SQLITE3 CONFIG
 print("Creating SQLite3 database...")
@@ -32,7 +39,6 @@ print("✅ SQLite3 database created.")
 
 # QDRANT CONFIG
 print("Creating Qdrant collection...")
-settings = yaml.safe_load(open("config.yaml", "r"))
 qdrantdir_path = os.path.join("app", "storage", "qdrant")
 os.makedirs(qdrantdir_path, exist_ok=True)
 
@@ -41,9 +47,9 @@ client = QdrantClient(path=os.path.join(qdrantdir_path, "vectorstore"))
 try:
 
     client.create_collection(
-        collection_name=settings['configs'][1]['qdrant_config'][0]['collection_name'], 
+        collection_name=configs['qdrant_config']['collection_name'], 
         vectors_config=models.VectorParams(
-            size=settings['configs'][2]['embedding_config'][3]['output_length'], 
+            size=configs['embedding_config']['output_length'], 
             distance=models.Distance.COSINE
         ),
     )

@@ -3,7 +3,7 @@ from app.scraper.scraper import ImageData
 from qdrant_client import QdrantClient
 from typing import List
 from typing import Dict, Any
-import yaml
+from app.config_loader import ConfigLoader
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
 from langchain_core.documents import Document
@@ -18,19 +18,19 @@ class LangchainProcessor(Processor):
     
     def __init__(self):
         super().__init__()
-        self.configs = self.read_config()
-        self.tokenizer = self.load_tokenizer_model(self.configs['tokenizer'])
-        if self.configs['use_emb_model_max_seq_length']:
-            self.chunk_size = self.configs['max_seq_length']
-        else:
-            self.chunk_size = self.configs['chunk_size']
-        self.chunk_overlap = int(self.chunk_size * self.configs['chunk_overlap_percent'])
+        self.configs = ConfigLoader().get_config()
+        self.tokenizer = self.load_tokenizer_model(self.configs['embedding_config']['tokenizer'])
+        chunk_config = self.configs['chunking_config']
+        self.chunk_size = \
+            chunk_config['chunk_size'] if not chunk_config['use_emb_model_max_seq_length'] else self.configs['embedding_config']['tokenizer']
+        self.chunk_size = self.chunk_size - chunk_config['chunk_size_penalty']
+        self.chunk_overlap = int(self.chunk_size * chunk_config['chunk_overlap_percent'])
         self.markdown_splitter = MarkdownHeaderTextSplitter([("##", "chapter")])
         self.token_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
             separators=['. '], # split by sentences
             keep_separator=True,
             tokenizer=self.tokenizer, 
-            chunk_size= self.chunk_size - self.configs['chunk_size_penalty'],
+            chunk_size= self.chunk_size,
             chunk_overlap=self.chunk_overlap
         )
 
@@ -38,26 +38,6 @@ class LangchainProcessor(Processor):
         """Loads the tokenizer of the Embedding Model used by the Embedding Server."""
         token = AutoTokenizer.from_pretrained(model_name)
         return token
-
-    def read_config(self) -> Dict[str, Any]:
-
-        config_path = 'config.yaml'
-        
-        with open(config_path, 'r') as file:
-            config = yaml.safe_load(file)
-        
-        embedding_config = config['configs'][2]['embedding_config']
-        chunking_config = config['configs'][3]['chunking_config']
-        
-        # Create a flat dictionary with direct access to needed configs
-        return {
-            'tokenizer': embedding_config[1]['tokenizer'],
-            'max_seq_length': embedding_config[2]['max_seq_length'],
-            'use_emb_model_max_seq_length': chunking_config[0]['use_emb_model_max_seq_length'],
-            'chunk_size': chunking_config[1]['chunk_size'],
-            'chunk_size_penalty': chunking_config[2]['chunk_size_penalty'],
-            'chunk_overlap_percent': chunking_config[3]['chunk_overlap_percent']
-        }
     
     def split_md_data(self, md_data : str) -> List[Document]:
         """
@@ -73,10 +53,11 @@ class LangchainProcessor(Processor):
         return splits
 
 
-    def create_split_metadata(self, paper_id : str, md_splits : List[Document]) -> List[Document]:
+    def create_split_metadata(self, paper_id : str, md_splits : List[Document]) -> None:
         """
         Creates metadata for each split.
         Args:
+            paper_id (str): Paper ID.
             md_splits (List[Document]): List of Document objects.
         Returns:
             List[Document]: List of Document objects containing metadata.
@@ -100,7 +81,7 @@ class LangchainProcessor(Processor):
     def insert_paper_info(self, paper_info: Document, paper_id : str, sql_conn : Connection) -> None:
         """
         Inserts paper info into the database.
-        Args:
+        Argas:
             paper_info (Document): Document object containing paper info.
             paper_id (str): Paper ID.
             sql_conn (Connection): SQLite connection object.
@@ -112,6 +93,7 @@ class LangchainProcessor(Processor):
 
     def process(self, md_data: str, image_data : ImageData, paper_id : str, sql_conn : Connection, qdrant_client : QdrantClient) -> None:
 
+        # process markdown data
         md_splits = self.split_md_data(md_data)
         self.insert_paper_info(md_splits[0], paper_id, sql_conn)
         md_splits.pop(0) # Remove paper info from the list
