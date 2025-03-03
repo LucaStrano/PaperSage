@@ -12,6 +12,7 @@ configs:
       - tokenizer: nomic-ai/nomic-embed-text-v1.5 # huggingface model id
       - max_seq_length: 8192
       - output_length: 768
+      - embed_images: True # Embed images if true (do not change this, causes unexpected behavior)
       - image_model: nomic-ai/nomic-embed-vision-v1.5 # huggingface model id
       - use_same_output_length: True # use the same output length for text and image embeddings
       - img_output_length: null # set if use_same_output_length is False
@@ -21,3 +22,4 @@ configs:
       - chunk_size: 500 # set if use_emb_model_max_seq_length is False
       - chunk_size_penalty: 20 # decreases max chunk size by amount, used to append section titles to chunks
       - chunk_overlap_percent: 0.2
+      - add_section_titles: True # add section titles to chunks
