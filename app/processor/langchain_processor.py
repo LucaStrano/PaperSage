@@ -1,11 +1,10 @@
 from app.processor.processor import Processor
 from app.scraper.scraper import ImageData
-from qdrant_client import QdrantClient
 from typing import List
-from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
-from langchain_core.embeddings.embeddings import Embeddings
-from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
 from langchain_core.documents import Document
+from langchain_qdrant import QdrantVectorStore
+from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
+from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
 from sqlite3 import Connection
 import re
 from uuid import uuid4
@@ -19,9 +18,8 @@ class LangchainProcessor(Processor):
                  image_data : ImageData, 
                  paper_id : str, 
                  sql_conn : Connection, 
-                 qdrant_client : QdrantClient,
-                 embed: Embeddings):
-        super().__init__(md_data, image_data, paper_id, sql_conn, qdrant_client, embed)
+                 vector_store : QdrantVectorStore):
+        super().__init__(md_data, image_data, paper_id, sql_conn, vector_store)
         self.tokenizer = self.load_tokenizer_model(self.configs['embedding_config']['tokenizer'])
         chunk_config = self.configs['chunking_config']
         self.chunk_size = \
@@ -93,14 +91,6 @@ class LangchainProcessor(Processor):
         self.sql_conn.commit()
         cursor.close()
 
-    def insert_text_in_vs(self, splits : List[Document]) -> None:
-        """
-        Inserts text data into the Qdrant Vector Store.
-        Args:
-            splits (List[Document]): List of Document objects.
-            qdrant_client (QdrantClient): QdrantClient object.
-        """
-        pass
 
     def process(self) -> None:
 
@@ -113,3 +103,4 @@ class LangchainProcessor(Processor):
             for split in md_splits:
                 if 'chapter' in split.metadata.keys():
                     split.page_content = f"## {split.metadata['chapter']}\n" + split.page_content
+        #self.insert_text_in_vs(md_splits)
