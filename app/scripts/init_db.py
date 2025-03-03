@@ -38,7 +38,7 @@ conn.close()
 print("✅ SQLite3 database created.")
 
 # QDRANT CONFIG
-print("Creating Qdrant collection...")
+print("Creating Qdrant collections...")
 qdrantdir_path = os.path.join("app", "storage", "qdrant")
 os.makedirs(qdrantdir_path, exist_ok=True)
 
@@ -47,20 +47,23 @@ client = QdrantClient(path=os.path.join(qdrantdir_path, "vectorstore"))
 try:
     emb_dize = configs['embedding_config']['output_length']
     same_length = configs['embedding_config']['use_same_output_length']
+    # text collection
     client.create_collection(
-        collection_name=configs['qdrant_config']['collection_name'], 
-        vectors_config={
-            'text': models.VectorParams(
+        collection_name=configs['qdrant_config']['text_collection_name'], 
+        vectors_config=models.VectorParams(
                 size=emb_dize, 
                 distance=models.Distance.COSINE
-            ),
-            'image': models.VectorParams(
-                size=emb_dize if same_length else configs['embedding_config']['img_output_length'],
-                distance=models.Distance.DOT
-            )
-        }
+        )
     )
-    print("✅ Qdrant collection created.")
+    #image collection
+    client.create_collection(
+        collection_name=configs['qdrant_config']['image_collection_name'], 
+        vectors_config=models.VectorParams(
+                size=emb_dize if same_length else configs['embedding_config']['img_output_length'], 
+                distance=models.Distance.COSINE
+        )
+    )
+    print("✅ Qdrant collections created.")
 except ValueError as e:
     if 'already exists' in str(e):
         print("Collection already exists.")

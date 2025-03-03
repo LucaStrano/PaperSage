@@ -5,13 +5,14 @@ configs:
       - port: 8000
 
   - qdrant_config:
-      - collection_name: papers
+      - text_collection_name: paper_texts
+      - image_collection_name: paper_images
       
   - embedding_config: # If you want to change model, also change the other settings accordingly
       - model: nomic-embed-text:137m-v1.5-fp16 # ollama model id
-      - tokenizer: nomic-ai/nomic-embed-text-v1.5 # huggingface model id
       - max_seq_length: 8192
       - output_length: 768
+      - tokenizer: nomic-ai/nomic-embed-text-v1.5 # huggingface model id
       - embed_images: True # Embed images if true (do not change this, causes unexpected behavior)
       - image_model: nomic-ai/nomic-embed-vision-v1.5 # huggingface model id
       - use_same_output_length: True # use the same output length for text and image embeddings

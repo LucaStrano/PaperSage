@@ -71,6 +71,8 @@ resetdb:
 	@if [ -z "$(id)" ]; then \
 		read -p "🚨 This will clear all papers from the database. Are you sure? (y/N): " confirm && [[ $$confirm == [yY] || $$confirm == [yY][eE][sS] ]] || { echo "❌ Database reset cancelled."; exit 1; }; \
 		python3 app/scripts/reset_db.py || { echo "❌ Failed to Reset Database. Aborting."; exit 1; }; \
+		echo "📦 Rebuilding Database..."; \
+		python3 app/scripts/init_db.py || { echo "❌ Failed to Initialize Database. Aborting."; exit 1; }; \
 		echo "✅ Database Resetted Successfully."; \
 	else \
 		read -p "🚨 This will delete paper with ID $(id). Are you sure? (y/N): " confirm && [[ $$confirm == [yY] || $$confirm == [yY][eE][sS] ]] || { echo "❌ Paper deletion cancelled."; exit 1; }; \
