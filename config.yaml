@@ -13,6 +13,8 @@ configs:
       - max_seq_length: 8192
       - output_length: 768
       - image_model: nomic-ai/nomic-embed-vision-v1.5 # huggingface model id
+      - use_same_output_length: True # use the same output length for text and image embeddings
+      - img_output_length: null # set if use_same_output_length is False
 
   - chunking_config:
       - use_emb_model_max_seq_length: False
