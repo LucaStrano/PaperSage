@@ -68,7 +68,6 @@ class LangchainProcessor(Processor):
         chapter_num_regex = r'\b\d+(?:\.\d+)*\b'
         fig_ref_ids_regex = r'(?i)\b(?:Figure|Fig\.?) (\d+(?:\.\d+)*)\b'
         for i, split in enumerate(md_splits):
-            split.metadata['id'] = str(uuid4())
             split.metadata['paper_id'] = self.paper_id
             # extract chapter id
             if 'chapter' in split.metadata.keys():
@@ -105,18 +104,38 @@ class LangchainProcessor(Processor):
             for split in splits:
                 split.page_content = prefix + split.page_content
 
-        self.text_vs.add_documents(splits)
+        uuids = [str(uuid4()) for _ in range(len(splits))]
+        self.text_vs.add_documents(splits, ids=uuids)
 
-    def save_images(self) -> None:
+    def save_images(self) -> List[str]:
         """
         Saves images in Save path.
+        Returns:
+            List[str]: List of image paths.
         """
+        img_paths = []
         base_path = os.path.join('app', 'storage', 'images', self.paper_id)
         os.makedirs(base_path, exist_ok=True) # Create directory with paper id
         for img, mdt in self.image_data:
             img_name = f"fig_{mdt['page_id']}_{mdt['fig_id']}.png"
-            img.save(os.path.join(base_path, img_name))
+            img_path = os.path.join(base_path, img_name)
+            img_paths.append(img_path)
+            img.save(img_path)
+        return img_paths
 
+    def create_image_metadata(self, img_paths : List[str]) -> None:
+        """
+        Creates metadata for each image. Modifies the ImageData object in place.
+        Args:
+            img_paths (List[str]): List of image paths.
+        """
+        for i, (img, mdt) in enumerate(self.image_data):
+            mdt['paper_id'] = self.paper_id
+            mdt['path'] = img_paths[i]
+            if 'caption' in mdt.keys(): # add figure reference id
+                ref_id = re.findall(r'(?i)\b(?:Figure|Fig\.?) (\d+(?:\.\d+)*)\b', mdt['caption'])
+                if ref_id: mdt['fig_ref_id'] = ref_id[0]
+            
     def process(self) -> None:
 
         # process markdown data
@@ -136,5 +155,8 @@ class LangchainProcessor(Processor):
 
         # process image data
         print("Processing image data...")
-        self.save_images()
-        #TODO: Implement image processing
+        print("Saving Images...")
+        img_paths = self.save_images()
+        print("Creating Image Metadata...")
+        self.create_image_metadata(img_paths)
+        #TODO: Implement Saving images to Qdrant Vector Store

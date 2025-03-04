@@ -208,6 +208,5 @@ cython_debug/
 # PROJECT IGNORES
 
 temp/
-app/storage/sqlite/*
-app/storage/qdrant/*
+app/storage/*
 .files/
