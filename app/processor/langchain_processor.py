@@ -18,8 +18,9 @@ class LangchainProcessor(Processor):
                  image_data : ImageData, 
                  paper_id : str, 
                  sql_conn : Connection, 
-                 vector_store : QdrantVectorStore):
-        super().__init__(md_data, image_data, paper_id, sql_conn, vector_store)
+                 text_vector_store : QdrantVectorStore,
+                 image_vector_store : QdrantVectorStore):
+        super().__init__(md_data, image_data, paper_id, sql_conn, text_vector_store, image_vector_store)
         self.tokenizer = self.load_tokenizer_model(self.configs['embedding_config']['tokenizer'])
         chunk_config = self.configs['chunking_config']
         self.chunk_size = \
@@ -103,7 +104,7 @@ class LangchainProcessor(Processor):
             for split in splits:
                 split.page_content = prefix + split.page_content
 
-        self.vector_store.add_documents(splits)
+        self.text_vs.add_documents(splits)
 
     def process(self) -> None:
 
@@ -112,6 +113,8 @@ class LangchainProcessor(Processor):
         md_splits = self.split_md_data()
         self.insert_paper_info(md_splits[0])
         md_splits.pop(0) # Remove paper info from the list
+        print("Total Splits to insert: ", len(md_splits))
+        print("Creating Split Metadata...")
         self.create_split_metadata(md_splits)
         if self.configs['chunking_config']['add_section_titles']:
             for split in md_splits:
@@ -119,3 +122,7 @@ class LangchainProcessor(Processor):
                     split.page_content = f"## {split.metadata['chapter']}\n" + split.page_content
         print("Inserting Documents into Vector Store...")
         self.insert_text_in_vs(md_splits)
+
+        # process image data
+        print("Processing image data...")
+        #TODO: Implement image processing

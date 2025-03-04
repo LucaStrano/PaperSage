@@ -14,13 +14,15 @@ class Processor(ABC):
                  image_data : ImageData, 
                  paper_id : str, 
                  sql_conn : Connection, 
-                 vector_store : VectorStore):
+                 text_vector_store : VectorStore,
+                 image_vector_store : VectorStore):
         self.configs = ConfigLoader().get_config()
         self.md_data = md_data
         self.image_data = image_data
         self.paper_id = paper_id
         self.sql_conn = sql_conn
-        self.vector_store = vector_store
+        self.text_vs = text_vector_store
+        self.image_vs = image_vector_store
         pass
     
 
