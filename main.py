@@ -64,7 +64,7 @@ async def main(message: cl.Message):
                 file_path = element.path
                 try:
 
-                    await cl.Message(content=f"Processing document \"{element.name}\"...")  .send()
+                    await cl.Message(content=f"Processing document \"{element.name}\"...").send()
                     
                     # step 1. add file to sqlite db if not processed
                     conn = cl.user_session.get("db_conn")
