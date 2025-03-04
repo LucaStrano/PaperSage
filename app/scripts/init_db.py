@@ -10,6 +10,11 @@ from app.config_loader import ConfigLoader
 
 configs = ConfigLoader().get_config()
 
+print("Creating Images Directory...")
+imgdir_path = os.path.join("app", "storage", "images")
+os.makedirs(imgdir_path, exist_ok=True)
+print("✅ Images Directory created.")
+
 # SQLITE3 CONFIG
 print("Creating SQLite3 database...")
 dbdir_path = os.path.join("app", "storage", "sqlite")
@@ -43,10 +48,10 @@ qdrantdir_path = os.path.join("app", "storage", "qdrant")
 os.makedirs(qdrantdir_path, exist_ok=True)
 
 client = QdrantClient(path=os.path.join(qdrantdir_path, "vectorstore"))
+emb_dize = configs['embedding_config']['output_length']
+same_length = configs['embedding_config']['use_same_output_length']
 
 try:
-    emb_dize = configs['embedding_config']['output_length']
-    same_length = configs['embedding_config']['use_same_output_length']
     # text collection
     client.create_collection(
         collection_name=configs['qdrant_config']['text_collection_name'], 
@@ -55,6 +60,13 @@ try:
                 distance=models.Distance.COSINE
         )
     )
+except ValueError as e:
+    if 'already exists' in str(e):
+        print("Text Collection already exists.")
+    else:
+        print("Error creating Text collection:", e)
+
+try:
     #image collection
     client.create_collection(
         collection_name=configs['qdrant_config']['image_collection_name'], 
@@ -66,8 +78,8 @@ try:
     print("✅ Qdrant collections created.")
 except ValueError as e:
     if 'already exists' in str(e):
-        print("Collection already exists.")
+        print("Image Collection already exists.")
     else:
-        print("Error creating collection:", e)
+        print("Error creating Image collection:", e)
 finally:
     client.close()

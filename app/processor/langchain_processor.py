@@ -8,6 +8,7 @@ from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizer
 from sqlite3 import Connection
 import re
 from uuid import uuid4
+import os
 
 class LangchainProcessor(Processor):
     """
@@ -106,6 +107,16 @@ class LangchainProcessor(Processor):
 
         self.text_vs.add_documents(splits)
 
+    def save_images(self) -> None:
+        """
+        Saves images in Save path.
+        """
+        base_path = os.path.join('app', 'storage', 'images', self.paper_id)
+        os.makedirs(base_path, exist_ok=True) # Create directory with paper id
+        for img, mdt in self.image_data:
+            img_name = f"fig_{mdt['page_id']}_{mdt['fig_id']}.png"
+            img.save(os.path.join(base_path, img_name))
+
     def process(self) -> None:
 
         # process markdown data
@@ -125,4 +136,5 @@ class LangchainProcessor(Processor):
 
         # process image data
         print("Processing image data...")
+        self.save_images()
         #TODO: Implement image processing
