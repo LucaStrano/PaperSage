@@ -12,6 +12,9 @@ configs:
       - model: nomic-embed-text:137m-v1.5-fp16 # ollama model id
       - max_seq_length: 8192
       - output_length: 768
+      - use_prefix: True
+      - query_prefix: "search_query: "
+      - document_prefix: "search_document: "
       - tokenizer: nomic-ai/nomic-embed-text-v1.5 # huggingface model id
       - embed_images: True # Embed images if true (do not change this, causes unexpected behavior)
       - image_model: nomic-ai/nomic-embed-vision-v1.5 # huggingface model id

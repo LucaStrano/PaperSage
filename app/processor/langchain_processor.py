@@ -91,10 +91,24 @@ class LangchainProcessor(Processor):
         self.sql_conn.commit()
         cursor.close()
 
+    
+    def insert_text_in_vs(self, splits : List[Document]) -> None:
+        """
+        Inserts text data into the Qdrant Vector Store.
+        Args:
+            splits (List[Document]): List of Document objects.
+        """
+        if self.configs['embedding_config']['use_prefix']:
+            prefix = self.configs['embedding_config']['document_prefix']
+            for split in splits:
+                split.page_content = prefix + split.page_content
+
+        self.vector_store.add_documents(splits)
 
     def process(self) -> None:
 
         # process markdown data
+        print("Processing markdown data...")
         md_splits = self.split_md_data()
         self.insert_paper_info(md_splits[0])
         md_splits.pop(0) # Remove paper info from the list
@@ -103,4 +117,5 @@ class LangchainProcessor(Processor):
             for split in md_splits:
                 if 'chapter' in split.metadata.keys():
                     split.page_content = f"## {split.metadata['chapter']}\n" + split.page_content
-        #self.insert_text_in_vs(md_splits)
+        print("Inserting Documents into Vector Store...")
+        self.insert_text_in_vs(md_splits)
