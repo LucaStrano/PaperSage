@@ -1,6 +1,8 @@
 from app.processor.processor import Processor
 from app.scraper.scraper import ImageData
-from typing import List
+from app.scripts.utils import embed_image
+from typing import List, Any
+from qdrant_client import QdrantClient, models
 from langchain_core.documents import Document
 from langchain_qdrant import QdrantVectorStore
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
@@ -9,6 +11,7 @@ from sqlite3 import Connection
 import re
 from uuid import uuid4
 import os
+
 
 class LangchainProcessor(Processor):
     """
@@ -20,8 +23,9 @@ class LangchainProcessor(Processor):
                  paper_id : str, 
                  sql_conn : Connection, 
                  text_vector_store : QdrantVectorStore,
-                 image_vector_store : QdrantVectorStore):
-        super().__init__(md_data, image_data, paper_id, sql_conn, text_vector_store, image_vector_store)
+                 img_emb : Any,
+                 img_proc : Any):
+        super().__init__(md_data, image_data, paper_id, sql_conn, text_vector_store, img_emb, img_proc)
         self.tokenizer = self.load_tokenizer_model(self.configs['embedding_config']['tokenizer'])
         chunk_config = self.configs['chunking_config']
         self.chunk_size = \
@@ -59,14 +63,17 @@ class LangchainProcessor(Processor):
         return splits
 
 
-    def create_split_metadata(self, md_splits : List[Document]) -> None:
+    def create_split_metadata(self, md_splits : List[Document]) -> List[str]:
         """
         Creates metadata for each split. Modifies the Document object in place.
         Args:
             md_splits (List[Document]): List of Document objects.
+        Returns:
+            List[str]: List of UUIDs.
         """
         chapter_num_regex = r'\b\d+(?:\.\d+)*\b'
         fig_ref_ids_regex = r'(?i)\b(?:Figure|Fig\.?) (\d+(?:\.\d+)*)\b'
+        uuids = [str(uuid4()) for _ in range(len(md_splits))]
         for i, split in enumerate(md_splits):
             split.metadata['paper_id'] = self.paper_id
             # extract chapter id
@@ -77,8 +84,9 @@ class LangchainProcessor(Processor):
             split.metadata['fig_ref_ids'] = re.findall(fig_ref_ids_regex, split.page_content)
             # next and previous split ids
             if i > 0:
-                split.metadata['prev_id'] = md_splits[i - 1].metadata['id']
-                md_splits[i-1].metadata['next_id'] = split.metadata['id']
+                split.metadata['prev_id'] = uuids[i - 1]
+                md_splits[i - 1].metadata['next_id'] = uuids[i]
+        return uuids
 
                 
     def insert_paper_info(self, paper_info: Document) -> None:
@@ -93,7 +101,7 @@ class LangchainProcessor(Processor):
         cursor.close()
 
     
-    def insert_text_in_vs(self, splits : List[Document]) -> None:
+    def insert_texts_in_vs(self, splits : List[Document], uuids : List[str]) -> None:
         """
         Inserts text data into the Qdrant Vector Store.
         Args:
@@ -104,7 +112,6 @@ class LangchainProcessor(Processor):
             for split in splits:
                 split.page_content = prefix + split.page_content
 
-        uuids = [str(uuid4()) for _ in range(len(splits))]
         self.text_vs.add_documents(splits, ids=uuids)
 
     def save_images(self) -> List[str]:
@@ -135,6 +142,28 @@ class LangchainProcessor(Processor):
             if 'caption' in mdt.keys(): # add figure reference id
                 ref_id = re.findall(r'(?i)\b(?:Figure|Fig\.?) (\d+(?:\.\d+)*)\b', mdt['caption'])
                 if ref_id: mdt['fig_ref_id'] = ref_id[0]
+
+    def insert_images_in_vs(self, img_paths : List[str]) -> None:
+        """
+        Inserts image data into the Qdrant Vector Store.
+        Args:
+            img_paths (List[str]): List of image paths.
+        """
+        qdrant_client : QdrantClient = self.text_vs.client
+        points = [
+            models.PointStruct(
+                id=str(uuid4()),
+                payload=mdt,
+                vector=embed_image(img, self.img_emb, self.img_proc)
+            )
+            for (img, mdt) in self.image_data
+        ]
+        for img, mdt in self.image_data:
+            img_emb = embed_image(img, self.img_emb, self.img_proc)
+            qdrant_client.upsert(
+                collection_name=self.configs['qdrant_config']['paper_images'],
+                points=points
+            )
             
     def process(self) -> None:
 
@@ -145,13 +174,13 @@ class LangchainProcessor(Processor):
         md_splits.pop(0) # Remove paper info from the list
         print("Total Splits to insert: ", len(md_splits))
         print("Creating Split Metadata...")
-        self.create_split_metadata(md_splits)
+        uuids = self.create_split_metadata(md_splits)
         if self.configs['chunking_config']['add_section_titles']:
             for split in md_splits:
                 if 'chapter' in split.metadata.keys():
                     split.page_content = f"## {split.metadata['chapter']}\n" + split.page_content
         print("Inserting Documents into Vector Store...")
-        self.insert_text_in_vs(md_splits)
+        self.insert_texts_in_vs(md_splits, uuids)
 
         # process image data
         print("Processing image data...")
@@ -159,4 +188,5 @@ class LangchainProcessor(Processor):
         img_paths = self.save_images()
         print("Creating Image Metadata...")
         self.create_image_metadata(img_paths)
+        self.insert_images_in_vs()
         #TODO: Implement Saving images to Qdrant Vector Store
