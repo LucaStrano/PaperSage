@@ -109,10 +109,20 @@ class LangchainProcessor(Processor):
         """
         if self.configs['embedding_config']['use_prefix']:
             prefix = self.configs['embedding_config']['document_prefix']
-            for split in splits:
-                split.page_content = prefix + split.page_content
-
-        self.text_vs.add_documents(splits, ids=uuids)
+            points = [
+                models.PointStruct(
+                    id=uuids[i],
+                    payload=split.metadata,
+                    vector=self.text_vs.embeddings.embed_query(prefix+split.page_content)
+                )
+                for i, split in enumerate(splits)
+            ]
+            self.text_vs.client.upsert(
+                collection_name=self.configs['qdrant_config']['text_collection_name'],
+                points=points
+            )
+        else:
+            self.text_vs.add_documents(splits, ids=uuids)
 
     def save_images(self) -> List[str]:
         """
@@ -161,7 +171,7 @@ class LangchainProcessor(Processor):
         for img, mdt in self.image_data:
             img_emb = embed_image(img, self.img_emb, self.img_proc)
             qdrant_client.upsert(
-                collection_name=self.configs['qdrant_config']['paper_images'],
+                collection_name=self.configs['qdrant_config']['image_collection_name'],
                 points=points
             )
             
@@ -188,5 +198,5 @@ class LangchainProcessor(Processor):
         img_paths = self.save_images()
         print("Creating Image Metadata...")
         self.create_image_metadata(img_paths)
-        self.insert_images_in_vs()
+        self.insert_images_in_vs(img_paths)
         #TODO: Implement Saving images to Qdrant Vector Store
