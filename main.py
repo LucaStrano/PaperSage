@@ -5,7 +5,9 @@ from chainlit.element import Element
 from app.scraper.papermage_scraper import PapermageScraper
 from app.processor.langchain_processor import LangchainProcessor
 from app.scraper.scraper import Scraper, ImageData
-from app.scripts.utils import calculate_hash, does_file_exist, save_file_to_db
+from app.scripts.utils import (
+    calculate_hash, does_file_exist, save_file_to_db, delete_file_from_db
+)
 from app.config_loader import ConfigLoader
 
 from typing import List, Tuple
@@ -44,15 +46,17 @@ async def generate_settings(papers: List[Tuple[str, str]]) -> cl.ChatSettings:
 
 @cl.step(type="tool")
 async def process_pdf(scraper : Scraper, file_path : str) -> Tuple[str, ImageData]:
-    return scraper.process_document(document_path=file_path)
+    return await cl.make_async(scraper.process_document)(file_path)
 
 @cl.step(type="tool")
 async def send_file(processor : LangchainProcessor) -> bool:
     try:
+        # Process directly without cl.make_async since LangchainProcessor
+        # contains sqlite3.Connection which cannot be pickled
         processor.process()
         return True
-    except Exception as e:
-        await cl.Message(content=f"Error processing document: {str(e)}. Try again").send()
+    except Exception:
+        return False
 
 ## -- CHAINLIT MAIN FUNCITONS -- ##
 
@@ -88,7 +92,7 @@ async def on_chat_start():
                 max_size_mb=50
             ).send()
             if files: break
-        # await cl.Message(content=f"Sent file.").send()
+        # process the file
         await main(cl.Message(content='',elements=[Element(mime='pdf', name=files[0].name, path=files[0].path)]))
     else:
         papers = await get_avaliable_papers(conn)
@@ -101,17 +105,16 @@ async def main(message: cl.Message):
     if message.elements:
         for element in message.elements:
             if element.mime == 'pdf':
-                file_path = element.path
+
+                conn = cl.user_session.get("db_conn")
+                cursor = conn.cursor()
+                file_id = await calculate_hash(open(element.path, "rb").read())
+
                 try:
 
                     await cl.Message(content=f"Processing document \"{element.name}\"...").send()
                     
                     # step 1. add file to sqlite db if not processed
-                    conn = cl.user_session.get("db_conn")
-                    cursor = conn.cursor()
-                    with open(file_path, "rb") as f:
-                        file_content = f.read()
-                    file_id = await calculate_hash(file_content)
                     if await does_file_exist(cursor, file_id):
                         await cl.Message(content="This file has already been processed!").send()
                         return
@@ -120,7 +123,7 @@ async def main(message: cl.Message):
 
                     # step 2. convert pdf to markdown, extract figures and captions
                     scraper = cl.user_session.get("scraper")
-                    md, img_data = await process_pdf(scraper, file_path)
+                    md, img_data = await process_pdf(scraper, element.path)
 
                     # step 3. process md, img_data
                     processor = LangchainProcessor(
@@ -133,6 +136,8 @@ async def main(message: cl.Message):
                         cl.user_session.get("img_proc")
                     )
                     res = await send_file(processor)
+                    if not res:
+                        raise Exception("Something went wrong while processing the document!")
 
                     # step 4. add new paper to settings
                     papers = await get_avaliable_papers(conn)
@@ -143,5 +148,7 @@ async def main(message: cl.Message):
                     
                 except Exception as e:
                     await cl.Message(content=f"Error processing document: {str(e)}").send()
+                    await delete_file_from_db(cursor, conn, file_id)
+
     else:
         await cl.Message(content=f"Textual Message Received!").send()

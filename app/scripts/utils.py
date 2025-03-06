@@ -27,6 +27,12 @@ async def save_file_to_db(cursor : sqlite3.Cursor, connection : sqlite3.Connecti
     cursor.execute("INSERT INTO papers (id, name) VALUES (?, ?)", (file_id, file_name))
     cursor.connection.commit()
 
+async def delete_file_from_db(cursor : sqlite3.Cursor, connection : sqlite3.Connection, file_id: str) -> None:
+    """[ASYNC] Delete the entries associated with file_id from the database."""
+    cursor.execute("DELETE FROM papers WHERE id = ?", (file_id,))
+    cursor.execute("DELETE FROM paper_info WHERE id = ?", (file_id,))
+    cursor.connection.commit()
+
 ### -- VECTOR STORE SUPPORT FUNCTIONS -- ###
 
 
