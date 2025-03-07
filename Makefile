@@ -61,12 +61,12 @@ run:
 	@eval "$$(python3 app/scripts/read_config.py)" && ollama list && chainlit run --host $$CHAINLIT_HOST --port $$CHAINLIT_PORT main.py -w || { echo "❌ Failed to Run PaperSage. Aborting."; exit 1; }
 
 
-.PHONY: resetdb
-resetdb:
+.PHONY: cleardb
+cleardb:
 	@make banner
 	@echo "\n\n"
 	@echo "+---------------------------+"
-	@echo "|  🔄 Resetting Database...  |"
+	@echo "|  🧹 Clearing Database...  |"
 	@echo "+---------------------------+"
 	@if [ -z "$(id)" ]; then \
 		read -p "🚨 This will clear all papers from the database. Are you sure? (y/N): " confirm && [[ $$confirm == [yY] || $$confirm == [yY][eE][sS] ]] || { echo "❌ Database reset cancelled."; exit 1; }; \
