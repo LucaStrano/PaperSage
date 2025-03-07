@@ -1,12 +1,12 @@
 import chainlit as cl
-from chainlit.input_widget import Select
+from chainlit.input_widget import Select, Switch
 from chainlit.element import Element
 
 from app.scraper.papermage_scraper import PapermageScraper
 from app.processor.langchain_processor import LangchainProcessor
 from app.scraper.scraper import Scraper, ImageData
 from app.scripts.utils import (
-    calculate_hash, does_file_exist, save_file_to_db, delete_file_from_db
+    calculate_hash, does_file_exist, save_file_to_db, delete_file_from_db, get_avaliable_papers
 )
 from app.config_loader import ConfigLoader
 
@@ -18,15 +18,52 @@ from langchain_ollama import OllamaEmbeddings
 from langchain_qdrant import QdrantVectorStore
 from langchain_core.vectorstores import VectorStore
 
-from transformers import AutoTokenizer, AutoModel, AutoImageProcessor
+from transformers import AutoModel, AutoImageProcessor
 
-## -- UTILITY FUNCTIONS -- ##
+async def handle_message():
+    pass
 
-async def get_avaliable_papers(connection: sqlite3.Connection) -> List[Tuple[str, str]]:
-    cursor = connection.cursor()
-    cursor.execute("SELECT id, name FROM papers")
-    papers = cursor.fetchall()
-    return papers
+async def handle_pdf(file_id : str, element: Element) -> bool:
+    """Full pipeline of PDF processing."""
+    conn = cl.user_session.get("db_conn")
+    await cl.Message(content=f"Processing document \"{element.name}\"...").send()
+    
+    try:
+        # step 1. add file to sqlite db if not processed
+        if await does_file_exist(conn, file_id):
+            await cl.Message(content="This file has already been processed!").send()
+            return False
+        await save_file_to_db(conn, file_id, element.name)
+        
+        # step 2. convert pdf to markdown, extract figures and captions
+        scraper = cl.user_session.get("scraper")
+        md, img_data = await process_pdf(scraper, element.path)
+
+        # step 3. process md, img_data
+        processor = LangchainProcessor(
+            md,
+            img_data,
+            file_id,
+            conn,
+            cl.user_session.get("text_vs"),
+            cl.user_session.get("img_emb"),
+            cl.user_session.get("img_proc")
+        )
+        res = await send_file(processor)
+        if not res:
+            raise Exception("Something went wrong while processing the document!")
+
+        # step 4. add new paper to settings
+        papers = await get_avaliable_papers(conn)
+        new_settings = await generate_settings(papers)
+        cl.user_session.set("paper_settings", new_settings)
+
+        await cl.Message(content=f"Document \"{element.name}\" processed!").send()
+        return True
+    except Exception as e:
+        await cl.Message(content=f"An error occurred: {e}").send()
+        await delete_file_from_db(conn, file_id)
+        return False
 
 async def generate_settings(papers: List[Tuple[str, str]]) -> cl.ChatSettings:
     proc_papers_list = [f"{paper[0]} - {paper[1]}" for paper in papers]
@@ -37,7 +74,8 @@ async def generate_settings(papers: List[Tuple[str, str]]) -> cl.ChatSettings:
                 label="Select a paper",
                 values=proc_papers_list,
                 initial_index=0
-            )
+            ),
+            Switch(id="img_search", label="Use chapter-wide Image search", initial=True),
         ]
     ).send()
     return settings
@@ -102,53 +140,17 @@ async def on_chat_start():
 
 @cl.on_message
 async def main(message: cl.Message):
+    img_path = None
     if message.elements:
         for element in message.elements:
             if element.mime == 'pdf':
-
-                conn = cl.user_session.get("db_conn")
-                cursor = conn.cursor()
                 file_id = await calculate_hash(open(element.path, "rb").read())
-
-                try:
-
-                    await cl.Message(content=f"Processing document \"{element.name}\"...").send()
-                    
-                    # step 1. add file to sqlite db if not processed
-                    if await does_file_exist(cursor, file_id):
-                        await cl.Message(content="This file has already been processed!").send()
-                        return
-                    await save_file_to_db(cursor, conn, file_id, element.name)
-                    
-
-                    # step 2. convert pdf to markdown, extract figures and captions
-                    scraper = cl.user_session.get("scraper")
-                    md, img_data = await process_pdf(scraper, element.path)
-
-                    # step 3. process md, img_data
-                    processor = LangchainProcessor(
-                        md,
-                        img_data,
-                        file_id,
-                        conn,
-                        cl.user_session.get("text_vs"),
-                        cl.user_session.get("img_emb"),
-                        cl.user_session.get("img_proc")
-                    )
-                    res = await send_file(processor)
-                    if not res:
-                        raise Exception("Something went wrong while processing the document!")
-
-                    # step 4. add new paper to settings
-                    papers = await get_avaliable_papers(conn)
-                    new_settings = await generate_settings(papers)
-                    cl.user_session.set("paper_settings", new_settings)
-
-                    await cl.Message(content=f"Document \"{element.name}\" processed!").send()
-                    
-                except Exception as e:
-                    await cl.Message(content=f"Error processing document: {str(e)}").send()
-                    await delete_file_from_db(cursor, conn, file_id)
-
+                res = await handle_pdf(file_id, element)
+                return
+            elif element.mime == 'image':
+                img_path = element.path
     else:
-        await cl.Message(content=f"Textual Message Received!").send()
+        # Textual message only
+        await cl.Message(content="Textual message received!").send()
+        
+        
