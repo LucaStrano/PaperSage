@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import sys
+import shutil
 from qdrant_client import models, QdrantClient
 
 sys.path.append(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
@@ -64,6 +65,16 @@ try:
             paper_id=paper_id
         )
 
+        images_folder = os.path.join("app", "storage", "images", paper_id)
+        if os.path.exists(images_folder):
+            try:
+                shutil.rmtree(images_folder)
+                print(f"Deleted images folder: {images_folder}")
+            except Exception as e:
+                print(f"Error deleting images folder {images_folder}: {e}")
+        else:
+            print(f"No images folder found for paper ID: {paper_id}")
+
     else: # Delete all entries
 
         cursor.execute("DELETE FROM papers")
@@ -77,6 +88,17 @@ try:
             print("Collections deleted.")
         else:
             print("Error Deleting Collections.")
+        
+        images_dir = os.path.join("app", "storage", "images")
+        if os.path.exists(images_dir):
+            for folder in os.listdir(images_dir):
+                folder_path = os.path.join(images_dir, folder)
+                if os.path.isdir(folder_path):
+                    try:
+                        shutil.rmtree(folder_path)
+                    except Exception as e:
+                        print(f"Error deleting images folder {folder_path}: {e}")
+            print("All image folders deleted.")
             
 except Exception as e:
     print(f"An error occurred: {e}")
