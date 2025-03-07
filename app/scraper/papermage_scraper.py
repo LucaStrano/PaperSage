@@ -3,7 +3,9 @@ from app.scraper.scraper import Scraper, ImageData
 from typing import List, Tuple, Optional, Dict
 from papermage.magelib import Entity, Box, Document
 from papermage.recipes import CoreRecipe
-from PIL.Image import Image
+from PIL import Image
+import io
+import fitz
 import logging
 
 class PapermageScraper(Scraper):
@@ -13,6 +15,7 @@ class PapermageScraper(Scraper):
         self.WRAP_ROWS = True
         self.PARAGRAPH = 'par'
         self.SECTION = 'sec'
+        self.zoom_factor = 2
         self.logger = logging.getLogger(__name__)
         self.logger.setLevel(logging.DEBUG)
         #log via file
@@ -37,8 +40,6 @@ class PapermageScraper(Scraper):
         keywords = 'Paper Keywords: ' + keywords if 'keywords' not in keywords.lower() else keywords
         return(title, authors, abstract, keywords)
 
-    # this is an example of word wrap-
-    # ping, which is a common occurence.
     def wrap_rows(self, first_row : Entity, sec_row : Entity) -> Tuple[Entity, Entity]:
         """wraps the first_row that ends with some_wo- and the sec_row that starts with rd."""
         first_row_words = first_row.text.split(' ')
@@ -62,42 +63,27 @@ class PapermageScraper(Scraper):
         ext_ent.boxes = [new_box]
         return ext_ent
 
-    def filter_preliminary_row(self, row : List[Entity], page : Entity) -> bool:
+    def check_box_intersections(self, row_box: Box, page: Entity, box_types: List[str]) -> bool:
+        """Checks if row intersects with any of the specified box types in the page."""
+        for box_type in box_types:
+            if any([row_box.is_overlap(item.boxes[0]) for item in page.intersect_by_box(box_type)]):
+                return True
+        return False
+
+    def filter_preliminary_row(self, row : Entity, page : Entity) -> bool:
         """Returns True if row intersects Titles, Abstracts, Authors and keywords from the page."""
-        row_box : Box = row.boxes[0]
-        return any([row_box.is_overlap(fig.boxes[0]) for fig in page.intersect_by_box('titles')]) \
-        or any([row_box.is_overlap(tab.boxes[0]) for tab in page.intersect_by_box('authors')]) \
-        or any([row_box.is_overlap(tab.boxes[0]) for tab in page.intersect_by_box('abstracts')]) \
-        or any([row_box.is_overlap(tab.boxes[0]) for tab in page.intersect_by_box('keywords')]) \
+        preliminary_types = ['titles', 'authors', 'abstracts', 'keywords']
+        return self.check_box_intersections(row.boxes[0], page, preliminary_types)
 
     def filter_row(self, row : Entity, page : Entity) -> bool:
         """Returns True if row intersects any figure, table or equation from the page."""
-        # check if the paragraph is in the body of the paper
-        row_box : Box = row.boxes[0]
-        return any([row_box.is_overlap(fig.boxes[0]) for fig in page.intersect_by_box('figures')]) \
-        or any([row_box.is_overlap(tab.boxes[0]) for tab in page.intersect_by_box('tables')]) \
-        or any([row_box.is_overlap(cap.boxes[0]) for cap in page.intersect_by_box('captions')]) \
-        or any([row_box.is_overlap(eq.boxes[0]) for eq in page.intersect_by_box('equations')]) \
-        or any([row_box.is_overlap(foot.boxes[0]) for foot in page.intersect_by_box('footers')]) \
-        or any([row_box.is_overlap(foot.boxes[0]) for foot in page.intersect_by_box('footnotes')]) \
-        or any([row_box.is_overlap(head.boxes[0]) for head in page.intersect_by_box('headers')])
+        filter_types = ['figures', 'tables', 'captions', 'equations', 'footers', 'footnotes', 'headers']
+        return self.check_box_intersections(row.boxes[0], page, filter_types)
 
     def get_section(self, doc : Document, row : Entity) -> Optional[Entity]:
         """Returns the section that intersects with the row, None Otherwise."""
         sections = doc.intersect_by_box(row, 'sections')
         return sections[0] if len(sections) > 0 else None
-
-    def extend_box(self, ent : Entity, amount : float) -> Entity:
-        """Returns a copy of the entity with a box extended upwards and downwards by amount."""
-        ext_ent = Entity(spans=ent.spans.copy(), boxes=ent.boxes.copy(), 
-                        images=ent.images.copy(), metadata=ent.metadata)
-        # coordinates are relative to the page size
-        json_box = ent.boxes[0].to_json()
-        json_box[1] = json_box[1] - amount if json_box[1] - amount > 0 else 0 # extend box upwards
-        json_box[3] = json_box[3] + amount*2 if json_box[3] + amount*2 < 1 else 1 # extend box downwards
-        new_box = Box.from_json(json_box)
-        ext_ent.boxes = [new_box]
-        return ext_ent
 
     def find_captions_from_image(self, image : Entity, doc : Document, entity_type : str = 'captions') -> Optional[str]:
         """Returns the entity of type entity_type that intersects with ent."""
@@ -106,12 +92,17 @@ class PapermageScraper(Scraper):
         if not len(entities)>0: return None
         return self.concatenate_texts(entities)
 
-    def extract_image_from_box(self, fig : Entity, page : Entity, page_wdth : int, page_hght : int ) -> Image:
+    def extract_image_from_box(self, pdf_doc : fitz.Document, fig : Entity, page : Entity, page_wdth : int, page_hght : int ) -> Image:
         """Extracts the Image from the page that intersects with the box."""
-        fig_box = fig.boxes[0]
-        fig_box = fig_box.to_absolute(page_wdth, page_hght).xy_coordinates
-        page_image = page.images[0]
-        return page_image._pilimage.crop(fig_box)
+        page_num = fig.boxes[0].page
+        fig_box = fig.boxes[0].to_absolute(page_wdth, page_hght).xy_coordinates
+        fig_box = [el*self.zoom_factor for el in fig_box]
+        mat = fitz.Matrix(self.zoom_factor, self.zoom_factor)
+        pdf_page = pdf_doc[page_num]
+        pix = pdf_page.get_pixmap(matrix=mat)
+        img = Image.open(io.BytesIO(pix.tobytes("png")))
+        cropped_img = img.crop(fig_box)
+        return cropped_img
 
 
     def convert_rows_to_markdown(self, doc : Document, proc_rows : List[Dict[str,str|Entity]]) -> str:
@@ -147,11 +138,12 @@ class PapermageScraper(Scraper):
         self.logger.info("FINISHED CONVERTING EXTRACTED ROWS TO MARKDOWN")
         return content
 
-    def process_document(self, document_path : str) -> Tuple[List[Tuple], str]:
-        """Processes the document and returns the image data and markdown content."""
+    def process_document(self, document_path : str) -> Tuple[str, ImageData]:
+        """Processes the document and returns the markdown content and image data."""
 
         recipe = CoreRecipe()
         doc = recipe.run(document_path)
+        pdf_doc = fitz.open(document_path)
 
         ref_rows : List[Entity] = [] # content of the references section
         found_ref = False
@@ -171,7 +163,7 @@ class PapermageScraper(Scraper):
                 caption = self.find_captions_from_image(fig, doc)
                 self.logger.debug(f"FOUND FIGURE {fig_idx} IN PAGE {page_idx}")
                 self.logger.debug(f"FOUND CAPTION {caption}")
-                img = self.extract_image_from_box(fig, page, width, height)
+                img = self.extract_image_from_box(pdf_doc, fig, page, width, height)
                 data = {'caption': caption, 'page_id': page_idx, 'fig_id': fig_idx}
                 image_data.append((img, data))
 
@@ -199,6 +191,7 @@ class PapermageScraper(Scraper):
                 else:
                     proc_rows.append( {'type': self.PARAGRAPH, 'entity':row} )
 
+        pdf_doc.close()
         # convert processed rows into markdown format
         markdown_content = self.convert_rows_to_markdown(doc, proc_rows)
-        return (markdown_content, image_data)
+        return markdown_content, image_data
