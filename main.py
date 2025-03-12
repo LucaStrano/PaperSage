@@ -16,7 +16,7 @@ from app.config_loader import ConfigLoader
 from typing import List, Tuple
 
 import sqlite3
-from qdrant_client import QdrantClient
+from qdrant_client import QdrantClient, models
 from langchain_community.chat_models import ChatLiteLLM
 from langchain_ollama import OllamaEmbeddings
 from langchain_qdrant import QdrantVectorStore
@@ -25,12 +25,31 @@ from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 
 from transformers import AutoModel, AutoImageProcessor
 
-async def generate_context_str(retriever: VectorStoreRetriever, query: str) -> str:
+
+async def generate_context_str(vector_store: QdrantVectorStore, 
+                               query: str, 
+                               k : int, 
+                               paper_id : str, 
+                               include_paper_info : bool) -> str:
     """Generate context string based on the query."""
-    docs = retriever.invoke(query)
+
+    def get_paper_info(paper_id: str) -> str:
+        """Get paper info based on the paper_id."""
+        conn = cl.user_session.get("db_conn")
+        cursor = conn.cursor()
+        cursor.execute("SELECT content FROM paper_info WHERE id=?", (paper_id,))
+        result = cursor.fetchone()
+        if result: return result[0]
+        print("ERROR: PAPER INFO NOT FOUND!")
+        return ""
+    
     context_str = ""
+    if include_paper_info:
+        paper_info = get_paper_info(paper_id)
+        context_str += f"PAPER INFO:\n{paper_info}\n{'='*25}\n"
+    docs = await retrieve_context(vector_store, query, k, paper_id)
     for i, doc in enumerate(docs):
-        context_str += f"CHUNK {i} - FROM CHAPTER {doc.metadata.get('chapter', 'UNKNOWN')}\n{doc.page_content}\n\n"
+        context_str += f"CHUNK {i} - FROM CHAPTER {doc.metadata.get('chapter', 'UNKNOWN')}\n{doc.page_content}\n{'='*25}\n"
     return context_str
 
 async def generate_history_str(chat_history : List[BaseMessage]) -> str:
@@ -99,11 +118,25 @@ async def generate_settings(papers: List[Tuple[str, str]]) -> cl.ChatSettings:
                 initial_index=0
             ),
             Switch(id="img_search", label="Use chapter-wide Image search", initial=True),
+            Switch(id="paper_info", label="Add paper info to context", initial=True)
         ]
     ).send()
     return settings
 
 ## -- CHAINLIT TOOLS -- ##
+
+@cl.step(type="tool")
+async def retrieve_context(vector_store : QdrantVectorStore, query : str, k : int, paper_id : str) -> str:
+    docs = await cl.make_async(vector_store.similarity_search)(
+        query=query,
+        k=k,
+        filter=models.Filter(
+            must=[
+                models.FieldCondition(key="metadata.paper_id", match=models.MatchValue(value=paper_id))
+            ]
+        )
+    )
+    return docs
 
 @cl.step(type="tool")
 async def process_pdf(scraper : Scraper, file_path : str) -> Tuple[str, ImageData]:
@@ -116,7 +149,8 @@ async def send_file(processor : LangchainProcessor) -> bool:
         # contains sqlite3.Connection which cannot be pickled
         processor.process()
         return True
-    except Exception:
+    except Exception as e:
+        print(e)
         return False
 
 ## -- CHAINLIT MAIN FUNCITONS -- ##
@@ -136,7 +170,7 @@ async def on_chat_start():
     qdrant_client = QdrantClient(path='app/storage/qdrant/vectorstore')
     text_vs : VectorStore = QdrantVectorStore(
         client=qdrant_client,
-        collection_name='paper_texts',
+        collection_name=configs['qdrant_config']['text_collection_name'],
         embedding=text_embed
     )
     cl.user_session.set("text_vs", text_vs)
@@ -204,10 +238,21 @@ async def main(message: cl.Message):
         user_msg = rewrite_res['rewritten_query']
     
     # temp response
-    llm : ChatLiteLLM = cl.user_session.get("chat_llm")
-    human_msg = HumanMessage(content=user_msg)
-    response = llm.invoke([human_msg])
-    await cl.Message(content=response.content).send()
-    chat_history.append(HumanMessage(content=user_msg))
-    chat_history.append(AIMessage(content=response.content))
+    paper_id = cl.user_session.get("paper_settings")['paper'].split(" - ")[0]
+    k = cl.user_session.get("configs")['agent_config']['k']
+    text_vs = cl.user_session.get("text_vs")
+    context_str = await generate_context_str(
+        text_vs, 
+        user_msg, 
+        k, 
+        paper_id,
+        cl.user_session.get("paper_settings")['paper_info']
+        )
+    await cl.Message(content=context_str).send()
+    # llm : ChatLiteLLM = cl.user_session.get("chat_llm")
+    # human_msg = HumanMessage(content=user_msg)
+    # response = llm.invoke([human_msg])
+    # await cl.Message(content=response.content).send()
+    # chat_history.append(HumanMessage(content=user_msg))
+    # chat_history.append(AIMessage(content=response.content))
         
