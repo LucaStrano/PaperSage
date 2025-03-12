@@ -20,9 +20,28 @@ from qdrant_client import QdrantClient
 from langchain_community.chat_models import ChatLiteLLM
 from langchain_ollama import OllamaEmbeddings
 from langchain_qdrant import QdrantVectorStore
-from langchain_core.vectorstores import VectorStore
+from langchain_core.vectorstores import VectorStore, VectorStoreRetriever
+from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 
 from transformers import AutoModel, AutoImageProcessor
+
+async def generate_context_str(retriever: VectorStoreRetriever, query: str) -> str:
+    """Generate context string based on the query."""
+    docs = retriever.invoke(query)
+    context_str = ""
+    for i, doc in enumerate(docs):
+        context_str += f"CHUNK {i} - FROM CHAPTER {doc.metadata.get('chapter', 'UNKNOWN')}\n{doc.page_content}\n\n"
+    return context_str
+
+async def generate_history_str(chat_history : List[BaseMessage]) -> str:
+    """Generate history string based on the chat history."""
+    history_str = ""
+    for i, msg in enumerate(chat_history):
+        if isinstance(msg, HumanMessage):
+            history_str += f"USER: {msg.content}\n"
+        elif isinstance(msg, AIMessage):
+            history_str += f"ASSISTANT: {msg.content}\n"
+    return history_str
 
 async def handle_message():
     pass
@@ -130,8 +149,9 @@ async def on_chat_start():
 
     chat_llm = ChatLiteLLM(
         model=configs['agent_config']['model_name'], 
-        temperature=configs['agent_config']['model_name']
+        temperature=configs['agent_config']['temperature'],
     )
+    cl.user_session.set("chat_llm", chat_llm)
     text_retriever = text_vs.as_retriever(
         search_type=configs['agent_config']['search_type'],
         search_kwargs={'k': configs['agent_config']['k'], 'fetch_k': configs['agent_config']['fetch_k']}
@@ -170,10 +190,24 @@ async def main(message: cl.Message):
                 img_path = element.path
 
     # handle message
-    await cl.Message(content="message received!").send()
+    user_msg = message.content
     chat_history = cl.user_session.get("chat_history")
     if len(chat_history) > 1:
+        print("Rewriting query...")
         rewrite_chain = cl.user_session.get("rewrite_chain")
-        # TODO process
-        
+        msg_num = cl.user_session.get("configs")['agent_config']['msg_history_len']
+        relevant_history = chat_history if len(chat_history) <= msg_num else chat_history[-msg_num:]
+        message_history_str = await generate_history_str(relevant_history)
+        rewrite_res = rewrite_chain.invoke(
+            {'user_query': user_msg, 'user_assistant_conversation': message_history_str}
+        )
+        user_msg = rewrite_res['rewritten_query']
+    
+    # temp response
+    llm : ChatLiteLLM = cl.user_session.get("chat_llm")
+    human_msg = HumanMessage(content=user_msg)
+    response = llm.invoke([human_msg])
+    await cl.Message(content=response.content).send()
+    chat_history.append(HumanMessage(content=user_msg))
+    chat_history.append(AIMessage(content=response.content))
         

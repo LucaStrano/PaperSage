@@ -34,3 +34,4 @@ configs:
       - search_type: similarity # or mmr
       - k: 5
       - fetch_k: 20
+      - msg_history_len: 5
