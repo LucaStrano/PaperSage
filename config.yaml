@@ -30,3 +30,7 @@ configs:
 
   - agent_config:
       - model_name: openai/gpt-4o # litellm model id
+      - temperature: 0.4
+      - search_type: similarity # or mmr
+      - k: 5
+      - fetch_k: 20

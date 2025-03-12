@@ -8,12 +8,16 @@ from app.scraper.scraper import Scraper, ImageData
 from app.scripts.utils import (
     calculate_hash, does_file_exist, save_file_to_db, delete_file_from_db, get_avaliable_papers
 )
+from app.prompts import (
+    rewrite_prompt, rewrite_parser
+)
 from app.config_loader import ConfigLoader
 
 from typing import List, Tuple
 
 import sqlite3
 from qdrant_client import QdrantClient
+from langchain_community.chat_models import ChatLiteLLM
 from langchain_ollama import OllamaEmbeddings
 from langchain_qdrant import QdrantVectorStore
 from langchain_core.vectorstores import VectorStore
@@ -107,6 +111,7 @@ async def on_chat_start():
     cl.user_session.set("configs", configs)
     cl.user_session.set("scraper", PapermageScraper())
 
+
     text_embed = OllamaEmbeddings(model=configs['embedding_config']['model'])
     cl.user_session.set("text_embed", text_embed)
     qdrant_client = QdrantClient(path='app/storage/qdrant/vectorstore')
@@ -120,6 +125,20 @@ async def on_chat_start():
     img_emb = AutoModel.from_pretrained("nomic-ai/nomic-embed-vision-v1.5", trust_remote_code=True)
     cl.user_session.set("img_proc", img_proc)
     cl.user_session.set("img_emb", img_emb)
+
+    cl.user_session.set("chat_history", [])
+
+    chat_llm = ChatLiteLLM(
+        model=configs['agent_config']['model_name'], 
+        temperature=configs['agent_config']['model_name']
+    )
+    text_retriever = text_vs.as_retriever(
+        search_type=configs['agent_config']['search_type'],
+        search_kwargs={'k': configs['agent_config']['k'], 'fetch_k': configs['agent_config']['fetch_k']}
+    )
+
+    rewrite_chain = rewrite_prompt | chat_llm | rewrite_parser
+    cl.user_session.set("rewrite_chain", rewrite_chain)
 
     papers = await get_avaliable_papers(conn)
     if len(papers) == 0:
@@ -149,8 +168,12 @@ async def main(message: cl.Message):
                 return
             elif element.mime == 'image':
                 img_path = element.path
-    else:
-        # Textual message only
-        await cl.Message(content="Textual message received!").send()
+
+    # handle message
+    await cl.Message(content="message received!").send()
+    chat_history = cl.user_session.get("chat_history")
+    if len(chat_history) > 1:
+        rewrite_chain = cl.user_session.get("rewrite_chain")
+        # TODO process
         
         
