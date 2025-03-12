@@ -23,6 +23,7 @@ from langchain_ollama import OllamaEmbeddings
 from langchain_qdrant import QdrantVectorStore
 from langchain_core.vectorstores import VectorStore, VectorStoreRetriever
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
+from langchain_core.output_parsers import StrOutputParser
 
 from transformers import AutoModel, AutoImageProcessor
 
@@ -182,7 +183,13 @@ async def on_chat_start():
         collection_name=configs['qdrant_config']['text_collection_name'],
         embedding=text_embed
     )
+    image_vs : VectorStore = QdrantVectorStore(
+        client=qdrant_client,
+        collection_name=configs['qdrant_config']['image_collection_name'],
+        embedding=text_embed
+    )
     cl.user_session.set("text_vs", text_vs)
+    cl.user_session.set("image_vs", image_vs)
     img_proc = AutoImageProcessor.from_pretrained("nomic-ai/nomic-embed-vision-v1.5")
     img_emb = AutoModel.from_pretrained("nomic-ai/nomic-embed-vision-v1.5", trust_remote_code=True)
     cl.user_session.set("img_proc", img_proc)
@@ -195,13 +202,15 @@ async def on_chat_start():
         temperature=configs['agent_config']['temperature'],
     )
     cl.user_session.set("chat_llm", chat_llm)
-    text_retriever = text_vs.as_retriever(
-        search_type=configs['agent_config']['search_type'],
-        search_kwargs={'k': configs['agent_config']['k'], 'fetch_k': configs['agent_config']['fetch_k']}
-    )
 
     rewrite_chain = rewrite_chat_prompt | chat_llm | rewrite_parser
     cl.user_session.set("rewrite_chain", rewrite_chain)
+
+    rag_chain = rag_chat_prompt | chat_llm | StrOutputParser()
+    cl.user_session.set("rag_chain", rag_chain)
+
+    multimodal_rag_chain = multimodal_rag_chat_prompt | chat_llm | StrOutputParser()
+    cl.user_session.set("multimodal_rag_chain", multimodal_rag_chain)
 
     papers = await get_avaliable_papers(conn)
     if len(papers) == 0:
@@ -222,7 +231,10 @@ async def on_chat_start():
 
 @cl.on_message
 async def main(message: cl.Message):
+    
     img_data = None
+    img_element = None
+
     if message.elements:
         for element in message.elements:
             if element.mime == 'pdf':
@@ -234,32 +246,47 @@ async def main(message: cl.Message):
                     img_data = base64.b64encode(f.read()).decode("utf-8")
 
     # handle message
+    paper_id = cl.user_session.get("paper_settings")['paper'].split(" - ")[0]
     user_msg = message.content
     chat_history = cl.user_session.get("chat_history")
     if len(chat_history) > 1:
         user_msg = rewrite_query(user_msg, chat_history)
+        print(f"User query rewritten: {user_msg}")
 
     if img_data is None:
-        # TODO get image from img vector store
-        pass
+        img_docs = await retrieve_context(
+            cl.user_session.get("image_vs"), 
+            user_msg, 
+            1, # TODO add k
+            paper_id
+        )
+        if img_docs:
+            # TODO choose relevant image
+            img_doc = img_docs[0]
+            with open(img_doc.metadata['path'], "rb") as f:
+                img_data = base64.b64encode(f.read()).decode("utf-8")
+            image_element = cl.Image(path=img_doc.metadata['path'], name="Retrieved Image", display="inline")
     
-    # temp response
-    paper_id = cl.user_session.get("paper_settings")['paper'].split(" - ")[0]
-    k = cl.user_session.get("configs")['agent_config']['k']
-    text_vs = cl.user_session.get("text_vs")
     context_str = await generate_context_str(
-        text_vs, 
+        cl.user_session.get("text_vs"), 
         user_msg, 
-        k, 
+        cl.user_session.get("configs")['agent_config']['k'], 
         paper_id,
         cl.user_session.get("paper_settings")['paper_info']
     )
-    #await cl.Message(content=context_str).send()
-    # await cl.Message(content=f"User query: {user_msg}").send()
-    # llm : ChatLiteLLM = cl.user_session.get("chat_llm")
-    # human_msg = HumanMessage(content=user_msg)
-    # response = llm.invoke([human_msg])
-    # await cl.Message(content=response.content).send()
-    # chat_history.append(HumanMessage(content=user_msg))
-    # chat_history.append(AIMessage(content=response.content))
+
+    response = ''
+    if img_data:
+        multimodal_rag_chain = cl.user_session.get("multimodal_rag_chain")
+        response = multimodal_rag_chain.invoke(
+            # TODO add image data (caption)
+            {'context': context_str, 'user_query': user_msg, 'image_data': img_data}
+        )
+    await cl.Message(
+        content=response, 
+        elements=[image_element] if image_element else []
+    ).send()
+
+    chat_history.append(HumanMessage(content=user_msg))
+    chat_history.append(AIMessage(content=response))
         
