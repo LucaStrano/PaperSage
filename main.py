@@ -9,7 +9,7 @@ from app.scripts.utils import (
     calculate_hash, does_file_exist, save_file_to_db, delete_file_from_db, get_avaliable_papers
 )
 from app.prompts import (
-    rewrite_prompt, rewrite_parser
+    rewrite_chat_prompt, rewrite_parser
 )
 from app.config_loader import ConfigLoader
 
@@ -191,7 +191,7 @@ async def on_chat_start():
         search_kwargs={'k': configs['agent_config']['k'], 'fetch_k': configs['agent_config']['fetch_k']}
     )
 
-    rewrite_chain = rewrite_prompt | chat_llm | rewrite_parser
+    rewrite_chain = rewrite_chat_prompt | chat_llm | rewrite_parser
     cl.user_session.set("rewrite_chain", rewrite_chain)
 
     papers = await get_avaliable_papers(conn)
@@ -248,7 +248,8 @@ async def main(message: cl.Message):
         paper_id,
         cl.user_session.get("paper_settings")['paper_info']
         )
-    await cl.Message(content=context_str).send()
+    #await cl.Message(content=context_str).send()
+    # await cl.Message(content=f"User query: {user_msg}").send()
     # llm : ChatLiteLLM = cl.user_session.get("chat_llm")
     # human_msg = HumanMessage(content=user_msg)
     # response = llm.invoke([human_msg])
