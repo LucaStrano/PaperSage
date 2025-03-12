@@ -112,7 +112,7 @@ class LangchainProcessor(Processor):
             points = [
                 models.PointStruct(
                     id=uuids[i],
-                    payload=split.metadata,
+                    payload={'metadata': split.metadata, 'page_content': split.page_content},
                     vector=self.text_vs.embeddings.embed_query(prefix+split.page_content)
                 )
                 for i, split in enumerate(splits)
@@ -153,27 +153,23 @@ class LangchainProcessor(Processor):
                 ref_id = re.findall(r'(?i)\b(?:Figure|Fig\.?) (\d+(?:\.\d+)*)\b', mdt['caption'])
                 if ref_id: mdt['fig_ref_id'] = ref_id[0]
 
-    def insert_images_in_vs(self, img_paths : List[str]) -> None:
+    def insert_images_in_vs(self) -> None:
         """
         Inserts image data into the Qdrant Vector Store.
-        Args:
-            img_paths (List[str]): List of image paths.
         """
         qdrant_client : QdrantClient = self.text_vs.client
         points = [
             models.PointStruct(
                 id=str(uuid4()),
-                payload=mdt,
+                payload={'metadata': mdt, 'page_content': mdt['caption'] if 'caption' in mdt.keys() else ''},
                 vector=embed_image(img, self.img_emb, self.img_proc)
             )
             for (img, mdt) in self.image_data
         ]
-        for img, mdt in self.image_data:
-            img_emb = embed_image(img, self.img_emb, self.img_proc)
-            qdrant_client.upsert(
-                collection_name=self.configs['qdrant_config']['image_collection_name'],
-                points=points
-            )
+        qdrant_client.upsert(
+            collection_name=self.configs['qdrant_config']['image_collection_name'],
+            points=points
+        )
             
     def process(self) -> None:
 
@@ -187,7 +183,7 @@ class LangchainProcessor(Processor):
         uuids = self.create_split_metadata(md_splits)
         if self.configs['chunking_config']['add_section_titles']:
             for split in md_splits:
-                if 'chapter' in split.metadata.keys():
+                if 'chapter' in split.metadata.keys() and self.configs['chunking_config']['add_section_titles']:
                     split.page_content = f"## {split.metadata['chapter']}\n" + split.page_content
         print("Inserting Documents into Vector Store...")
         self.insert_texts_in_vs(md_splits, uuids)
@@ -198,5 +194,4 @@ class LangchainProcessor(Processor):
         img_paths = self.save_images()
         print("Creating Image Metadata...")
         self.create_image_metadata(img_paths)
-        self.insert_images_in_vs(img_paths)
-        #TODO: Implement Saving images to Qdrant Vector Store
+        self.insert_images_in_vs()
