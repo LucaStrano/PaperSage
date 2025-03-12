@@ -1,8 +1,11 @@
 chainlit==2.2.1
 papermage[dev,predictors,visualizers]==0.20.0
 qdrant_client==1.13.2
-langchain==0.3.19
+langchain==0.3.20
+langchain_community==0.3.19
 langchain-text-splitters==0.3.6
 langchain-qdrant==0.2.0
 langchain_ollama==0.2.3
+litellm==1.63.6
+PyMuPDF==1.25.3
 einops==0.8.1

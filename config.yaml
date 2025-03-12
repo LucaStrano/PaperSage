@@ -27,3 +27,6 @@ configs:
       - chunk_size_penalty: 20 # decreases max chunk size by amount, used to append section titles to chunks
       - chunk_overlap_percent: 0.2
       - add_section_titles: True # add section titles to chunks
+
+  - agent_config:
+      - model_name: openai/gpt-4o # litellm model id
