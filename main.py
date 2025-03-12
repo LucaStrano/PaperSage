@@ -9,11 +9,12 @@ from app.scripts.utils import (
     calculate_hash, does_file_exist, save_file_to_db, delete_file_from_db, get_avaliable_papers
 )
 from app.prompts import (
-    rewrite_chat_prompt, rewrite_parser
+    rewrite_chat_prompt, rewrite_parser, rag_chat_prompt, multimodal_rag_chat_prompt
 )
 from app.config_loader import ConfigLoader
 
 from typing import List, Tuple
+import base64
 
 import sqlite3
 from qdrant_client import QdrantClient, models
@@ -25,6 +26,27 @@ from langchain_core.messages import HumanMessage, AIMessage, BaseMessage
 
 from transformers import AutoModel, AutoImageProcessor
 
+async def rewrite_query(user_query: str, chat_history: List[BaseMessage]) -> str:
+    """Rewrite the user query based on the chat history."""
+
+    def generate_history_str(chat_history : List[BaseMessage]) -> str:
+        """Generate history string based on the chat history."""
+        history_str = ""
+        for i, msg in enumerate(chat_history):
+            if isinstance(msg, HumanMessage):
+                history_str += f"USER: {msg.content}\n"
+            elif isinstance(msg, AIMessage):
+                history_str += f"ASSISTANT: {msg.content}\n"
+        return history_str
+
+    rewrite_chain = cl.user_session.get("rewrite_chain")
+    msg_num = cl.user_session.get("configs")['agent_config']['msg_history_len']
+    relevant_history = chat_history if len(chat_history) <= msg_num else chat_history[-msg_num:]
+    message_history_str = generate_history_str(relevant_history)
+    rewrite_res = rewrite_chain.invoke(
+        {'user_query': user_query, 'user_assistant_conversation': message_history_str}
+    )
+    return rewrite_res['rewritten_query']
 
 async def generate_context_str(vector_store: QdrantVectorStore, 
                                query: str, 
@@ -51,19 +73,6 @@ async def generate_context_str(vector_store: QdrantVectorStore,
     for i, doc in enumerate(docs):
         context_str += f"CHUNK {i} - FROM CHAPTER {doc.metadata.get('chapter', 'UNKNOWN')}\n{doc.page_content}\n{'='*25}\n"
     return context_str
-
-async def generate_history_str(chat_history : List[BaseMessage]) -> str:
-    """Generate history string based on the chat history."""
-    history_str = ""
-    for i, msg in enumerate(chat_history):
-        if isinstance(msg, HumanMessage):
-            history_str += f"USER: {msg.content}\n"
-        elif isinstance(msg, AIMessage):
-            history_str += f"ASSISTANT: {msg.content}\n"
-    return history_str
-
-async def handle_message():
-    pass
 
 async def handle_pdf(file_id : str, element: Element) -> bool:
     """Full pipeline of PDF processing."""
@@ -213,7 +222,7 @@ async def on_chat_start():
 
 @cl.on_message
 async def main(message: cl.Message):
-    img_path = None
+    img_data = None
     if message.elements:
         for element in message.elements:
             if element.mime == 'pdf':
@@ -221,21 +230,18 @@ async def main(message: cl.Message):
                 res = await handle_pdf(file_id, element)
                 return
             elif element.mime == 'image':
-                img_path = element.path
+                with open(element.path, "rb") as f:
+                    img_data = base64.b64encode(f.read()).decode("utf-8")
 
     # handle message
     user_msg = message.content
     chat_history = cl.user_session.get("chat_history")
     if len(chat_history) > 1:
-        print("Rewriting query...")
-        rewrite_chain = cl.user_session.get("rewrite_chain")
-        msg_num = cl.user_session.get("configs")['agent_config']['msg_history_len']
-        relevant_history = chat_history if len(chat_history) <= msg_num else chat_history[-msg_num:]
-        message_history_str = await generate_history_str(relevant_history)
-        rewrite_res = rewrite_chain.invoke(
-            {'user_query': user_msg, 'user_assistant_conversation': message_history_str}
-        )
-        user_msg = rewrite_res['rewritten_query']
+        user_msg = rewrite_query(user_msg, chat_history)
+
+    if img_data is None:
+        # TODO get image from img vector store
+        pass
     
     # temp response
     paper_id = cl.user_session.get("paper_settings")['paper'].split(" - ")[0]
@@ -247,7 +253,7 @@ async def main(message: cl.Message):
         k, 
         paper_id,
         cl.user_session.get("paper_settings")['paper_info']
-        )
+    )
     #await cl.Message(content=context_str).send()
     # await cl.Message(content=f"User query: {user_msg}").send()
     # llm : ChatLiteLLM = cl.user_session.get("chat_llm")
