@@ -15,7 +15,7 @@ from app.prompts import (
 )
 from app.config_loader import ConfigLoader
 
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import base64
 
 from qdrant_client import QdrantClient, models
@@ -53,17 +53,36 @@ async def rewrite_query(user_query: str, chat_history: List[BaseMessage]) -> str
 async def generate_context_str(vector_store: QdrantVectorStore, 
                                query: str, 
                                k: int, 
-                               paper_id: str, 
+                               paper_id: str,
+                               fig_ref_id: Optional[str],
+                               fig_caption: Optional[str],
                                include_paper_info: bool) -> str:
     """Generate context string based on the query."""
     
     context_str = ""
+    docs = None
     if include_paper_info:
-        # Use get_paper_info function that creates its own connection
         paper_info = await cl.make_async(get_paper_info)(paper_id)
         context_str += f"PAPER INFO:\n{paper_info}\n{'='*25}\n"
-    docs = await retrieve_context(vector_store, query, k, paper_id)
+    if fig_caption:
+        context_str += f"FIGURE CAPTION: {fig_caption}\n{'='*25}\n"
+    if fig_ref_id:
+        fig_filter=models.Filter(must=[
+            models.FieldCondition(key="metadata.paper_id", match=models.MatchValue(value=paper_id)),
+            models.FieldCondition(key="metadata.fig_ref_ids", match=models.MatchAny(any=[fig_ref_id]))
+        ])
+        figure_docs = await retrieve_context(vector_store, query, k, fig_filter)      
+        if figure_docs:
+            context_str += f"TEXT DISCUSSING FIGURE {fig_ref_id}:\n"
+            docs = figure_docs
+    
+    if docs is None:
+        doc_filter = models.Filter(must=[
+            models.FieldCondition(key="metadata.paper_id", match=models.MatchValue(value=paper_id))
+        ])
+        docs = await retrieve_context(vector_store, query, k, doc_filter)
     for i, doc in enumerate(docs):
+        # TODO add context expansion (for documents fetched from images)
         context_str += f"CHUNK {i} - FROM CHAPTER {doc.metadata.get('chapter', 'UNKNOWN')}\n{doc.page_content}\n{'='*25}\n"
     return context_str
 
@@ -124,15 +143,11 @@ async def generate_settings(papers: List[Tuple[str, str]]) -> cl.ChatSettings:
 ## -- CHAINLIT TOOLS -- ##
 
 @cl.step(type="tool")
-async def retrieve_context(vector_store: QdrantVectorStore, query: str, k: int, paper_id: str) -> str:
+async def retrieve_context(vector_store: QdrantVectorStore, query: str, k: int, filter : models.Filter) -> str:
     docs = await cl.make_async(vector_store.similarity_search)(
         query=query,
         k=k,
-        filter=models.Filter(
-            must=[
-                models.FieldCondition(key="metadata.paper_id", match=models.MatchValue(value=paper_id))
-            ]
-        )
+        filter=filter
     )
     return docs
 
@@ -205,8 +220,9 @@ async def on_chat_start():
 async def main(message: cl.Message):
     
     img_data = None
-    img_element = None
     image_element = None
+    fig_ref_id = None
+    fig_caption = None
 
     if message.elements:
         for element in message.elements:
@@ -231,7 +247,9 @@ async def main(message: cl.Message):
             cl.user_session.get("image_vs"), 
             user_msg, 
             1, # TODO add k
-            paper_id
+            models.Filter(must=[
+                models.FieldCondition(key="metadata.paper_id", match=models.MatchValue(value=paper_id))
+            ])
         )
         if img_docs:
             # TODO choose relevant image
@@ -239,14 +257,20 @@ async def main(message: cl.Message):
             with open(img_doc.metadata['path'], "rb") as f:
                 img_data = base64.b64encode(f.read()).decode("utf-8")
             image_element = cl.Image(path=img_doc.metadata['path'], name="Retrieved Image", display="inline")
+            fig_ref_id = img_doc.metadata.get('fig_ref_id', None)
+            fig_caption = img_doc.metadata.get('caption', None)
     
     context_str = await generate_context_str(
         cl.user_session.get("text_vs"), 
         user_msg, 
         cl.user_session.get("configs")['agent_config']['k'], 
         paper_id,
-        cl.user_session.get("paper_settings")['paper_info']
+        fig_ref_id,
+        fig_caption,
+        cl.user_session.get("paper_settings")['paper_info'],
     )
+
+    print(f"Context string: {context_str}")
 
     response = ''
     if img_data:
