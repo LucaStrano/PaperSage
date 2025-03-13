@@ -18,10 +18,10 @@ Input:
 
 # Instructions
 
-Rewrite the New Query so that it is clear, self-contained, and contextually enriched using the most relevant details from the Conversation History. The rewritten query should:
- 1. Retain the original intent of the user's query.
- 2. Incorporate necessary context from past messages to disambiguate or refine the request. Be concise and well-formed, think about optimizing retrieval in a vector store.
-If the query doesn't require any rewriting, output the user query AS IS, without any modifications.
+Rewrite the User Query so that it is clear, self-contained, and contextually enriched using the most relevant details from the Conversation History. The rewritten query should:
+ 1. Rewrite the user query only if the user is referring to past messages. Do not rewrite if the query is self-contained or referring to new context. If the query doesn't require any rewriting, output the user query AS IS, without any modifications.
+ 2. Retain the original intent of the user's query.
+ 3. Incorporate necessary context from past messages to disambiguate or refine the request. Be concise and well-formed, think about optimizing retrieval in a vector store.
 """
 
 rewrite_user_prompt = """\
