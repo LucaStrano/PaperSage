@@ -1,13 +1,13 @@
 from app.processor.processor import Processor
 from app.scraper.scraper import ImageData
 from app.scripts.utils import embed_image
+from app.scripts.db_helper import insert_paper_info
 from typing import List, Any
 from qdrant_client import QdrantClient, models
 from langchain_core.documents import Document
 from langchain_qdrant import QdrantVectorStore
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
 from transformers import AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
-from sqlite3 import Connection
 import re
 from uuid import uuid4
 import os
@@ -21,11 +21,10 @@ class LangchainProcessor(Processor):
     def __init__(self, md_data : str, 
                  image_data : ImageData, 
                  paper_id : str, 
-                 sql_conn : Connection, 
                  text_vector_store : QdrantVectorStore,
                  img_emb : Any,
                  img_proc : Any):
-        super().__init__(md_data, image_data, paper_id, sql_conn, text_vector_store, img_emb, img_proc)
+        super().__init__(md_data, image_data, paper_id, text_vector_store, img_emb, img_proc)
         self.tokenizer = self.load_tokenizer_model(self.configs['embedding_config']['tokenizer'])
         chunk_config = self.configs['chunking_config']
         self.chunk_size = \
@@ -95,10 +94,7 @@ class LangchainProcessor(Processor):
         Args:
             paper_info (Document): Document object containing paper info.
         """
-        cursor = self.sql_conn.cursor()
-        cursor.execute('INSERT INTO paper_info VALUES (?,?)', (self.paper_id, paper_info.page_content))
-        self.sql_conn.commit()
-        cursor.close()
+        insert_paper_info(self.paper_id, paper_info.page_content)
 
     
     def insert_texts_in_vs(self, splits : List[Document], uuids : List[str]) -> None:

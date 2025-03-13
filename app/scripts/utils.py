@@ -1,10 +1,8 @@
-import sqlite3
 import hashlib
 from PIL import Image
-from typing import Any, List, Tuple
-import torch.nn.functional as F
+from typing import Any, List
+from torch.functional import F
 
-### --- DB UTILITY FUNCTIONS --- ###
 
 async def calculate_hash(content : bytes, buffer_size : int = 4096) -> str:
     """[ASYNC] Returns the truncated hash of the content using a buffer with `buffer_size` chunks."""
@@ -15,35 +13,6 @@ async def calculate_hash(content : bytes, buffer_size : int = 4096) -> str:
     full_hash = hash_obj.hexdigest()
     truncated_hash = full_hash[:len(full_hash)//2]
     return truncated_hash
-
-async def does_file_exist(connection: sqlite3.Connection, file_id: str) -> bool:
-    """[ASYNC] Check if a file with the given ID exists in the database"""
-    cursor = connection.cursor()
-    cursor.execute("SELECT name FROM papers WHERE id = ?", (file_id,))
-    result = cursor.fetchone()
-    return result is not None
-    
-async def save_file_to_db(connection: sqlite3.Connection, file_id: str, file_name: str) -> None:
-    """[ASYNC] Save the file to the database. Raises an exception if unsuccessful."""
-    cursor = connection.cursor()
-    cursor.execute("INSERT INTO papers (id, name) VALUES (?, ?)", (file_id, file_name))
-    connection.commit()
-
-async def delete_file_from_db(connection: sqlite3.Connection, file_id: str) -> None:
-    """[ASYNC] Delete the entries associated with file_id from the database."""
-    cursor = connection.cursor()
-    cursor.execute("DELETE FROM papers WHERE id = ?", (file_id,))
-    cursor.execute("DELETE FROM paper_info WHERE id = ?", (file_id,))
-    connection.commit()
-
-async def get_avaliable_papers(connection: sqlite3.Connection) -> List[Tuple[str, str]]:
-    cursor = connection.cursor()
-    cursor.execute("SELECT id, name FROM papers")
-    papers = cursor.fetchall()
-    return papers
-
-### -- VECTOR STORE SUPPORT FUNCTIONS -- ###
-
 
 def embed_image(image : Image, img_model : Any, processor : Any, shortest_edge = 224) -> List[float]:
     """
