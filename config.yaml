@@ -29,9 +29,10 @@ configs:
       - add_section_titles: True # add section titles to chunks
 
   - agent_config:
-      - model_name: openai/gpt-4o # litellm model id
+      - model_name: openai/gpt-4o-mini # litellm model id
       - temperature: 0.4
       - search_type: similarity # or mmr
       - k: 5
       - fetch_k: 20
       - msg_history_len: 5
+      - img_sim_threshold: 0.4

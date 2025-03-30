@@ -134,7 +134,6 @@ async def generate_settings(papers: List[Tuple[str, str]]) -> cl.ChatSettings:
                 values=proc_papers_list,
                 initial_index=0
             ),
-            Switch(id="img_search", label="Use chapter-wide Image search", initial=True),
             Switch(id="paper_info", label="Add paper info to context", initial=True)
         ]
     ).send()
@@ -159,6 +158,7 @@ async def process_pdf(scraper: Scraper, file_path: str) -> Tuple[str, ImageData]
 
 @cl.on_chat_start
 async def on_chat_start():
+
     configs = ConfigLoader().get_config()
     cl.user_session.set("configs", configs)
     cl.user_session.set("scraper", PapermageScraper())
@@ -176,6 +176,7 @@ async def on_chat_start():
         collection_name=configs['qdrant_config']['image_collection_name'],
         embedding=text_embed
     )
+
     cl.user_session.set("text_vs", text_vs)
     cl.user_session.set("image_vs", image_vs)
     img_proc = AutoImageProcessor.from_pretrained("nomic-ai/nomic-embed-vision-v1.5")
@@ -199,6 +200,14 @@ async def on_chat_start():
 
     multimodal_rag_chain = multimodal_rag_chat_prompt | chat_llm | StrOutputParser()
     cl.user_session.set("multimodal_rag_chain", multimodal_rag_chain)
+
+    await cl.context.emitter.set_commands([
+        {
+            "id": "img_search",
+            "icon": "image", 
+            "description": "Ask PaperMage to search for images in the document",
+        }
+    ])
 
     papers = await cl.make_async(get_available_papers)()
     if len(papers) == 0:
@@ -238,22 +247,23 @@ async def main(message: cl.Message):
     paper_id = cl.user_session.get("paper_settings")['paper'].split(" - ")[0]
     user_msg = message.content
     chat_history = cl.user_session.get("chat_history")
-    if len(chat_history) > 1:
+    if len(chat_history) > 1 and img_data is None:
         user_msg = await rewrite_query(user_msg, chat_history)
         print(f"User query rewritten: {user_msg}")
 
-    if img_data is None:
-        img_docs = await retrieve_context(
-            cl.user_session.get("image_vs"), 
-            user_msg, 
-            1, # TODO add k
-            models.Filter(must=[
+    if img_data is None and message.command == "img_search":
+        img_vs : VectorStore = cl.user_session.get("image_vs")
+        img_docs = await cl.make_async(img_vs.similarity_search_with_relevance_scores)(
+            query=user_msg,
+            k=1,
+            score_threshold=cl.user_session.get("configs")['agent_config']['img_sim_threshold'],
+            filter = models.Filter(must=[
                 models.FieldCondition(key="metadata.paper_id", match=models.MatchValue(value=paper_id))
             ])
         )
-        if img_docs:
-            # TODO choose relevant image
-            img_doc = img_docs[0]
+        if len(img_docs) > 0:
+            print(f"Image docs similarity: {img_docs[0][1]}")
+            img_doc = img_docs[0][0]
             with open(img_doc.metadata['path'], "rb") as f:
                 img_data = base64.b64encode(f.read()).decode("utf-8")
             image_element = cl.Image(path=img_doc.metadata['path'], name="Retrieved Image", display="inline")
@@ -270,7 +280,7 @@ async def main(message: cl.Message):
         cl.user_session.get("paper_settings")['paper_info'],
     )
 
-    print(f"Context string: {context_str}")
+    # print(f"Context string: {context_str}")
 
     response = ''
     if img_data:
