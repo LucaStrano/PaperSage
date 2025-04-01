@@ -185,10 +185,13 @@ async def on_chat_start():
     cl.user_session.set("img_emb", img_emb)
 
     cl.user_session.set("chat_history", [])
-
+    api_base = None
+    if configs['agent_config']['api_base'] != "":
+        api_base = configs['agent_config']['api_base']
     chat_llm = ChatLiteLLM(
         model=configs['agent_config']['model_name'], 
         temperature=configs['agent_config']['temperature'],
+        api_base=api_base,
     )
     cl.user_session.set("chat_llm", chat_llm)
 

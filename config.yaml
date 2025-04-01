@@ -30,6 +30,7 @@ configs:
 
   - agent_config:
       - model_name: openai/gpt-4o-mini # litellm model id
+      - api_base: "" # set to "http://localhost:11434" for Ollama
       - temperature: 0.4
       - search_type: similarity # or mmr
       - k: 5
